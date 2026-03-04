@@ -1,0 +1,77 @@
+---
+description: Backend Python/AWS coding standards for Vibe Dating
+globs: backend/**/*.py
+alwaysApply: false
+---
+
+# Backend Coding Rules
+
+## Project Structure
+
+- Lambda handlers: `src/services/{service}/aws_lambdas/{lambda_name}/lambda_function.py`
+- Shared code: `src/common/aws_lambdas/core/` (manager, settings, rest_utils, auth_utils)
+- Data types: `src/common/aws_lambdas/core_types/` (chat.py, user.py, profile.py)
+- CloudFormation: `src/services/{service}/cloudformation/*.yaml`
+- Config: `src/config/parameters.yaml`
+
+## Python Standards
+
+- Python 3.11+ with type hints on all functions
+- Use `msgspec.Struct` for data validation (not Pydantic, not dataclasses for API types)
+- Use `@dataclass` only for internal config (`CoreSettings`)
+- Enum values use camelCase strings: `"versBottom"`, `"hostAndTravel"`
+- Use f-strings for string formatting
+
+```python
+# Data validation pattern
+class ProfileRecord(msgspec.Struct):
+    nickName: Optional[str] = None
+    age: Optional[str] = None
+    bodyType: Optional[BodyType] = None
+```
+
+## Lambda Handler Pattern
+
+```python
+def lambda_handler(event, context):
+    try:
+        user_id = extract_user_id_from_context(event)
+        body = parse_request_body(event)
+        # ... business logic via Manager classes ...
+        return generate_response(200, result)
+    except ResponseError as e:
+        return e.to_dict()
+    except Exception as ex:
+        return ResponseError(500, {"error": f"Internal server error: {str(ex)}"}).to_dict()
+```
+
+## Key Patterns
+
+- **Manager classes** extend `CommonManager` for DynamoDB operations
+- **ResponseError** for structured HTTP error responses
+- **SecretsManagerService.get_secret()** for AWS Secrets Manager
+- **generate_response()** and **parse_request_body()** from `rest_utils`
+- **extract_user_id_from_context()** from `auth_utils` for JWT-authenticated user ID
+
+## DynamoDB Conventions
+
+- PK: `ENTITY_TYPE#{id}` (e.g., `USER#abc12345`, `PROFILE#xyz67890`)
+- SK: `METADATA` or `ENTITY_TYPE#{id}` or `ENTITY_TYPE#{timestamp}`
+- Use transactions for multi-item operations
+- All IDs are 8-character base64 strings
+
+## Deployment Commands
+
+```bash
+poetry run service-deploy {service}              # Deploy CloudFormation
+poetry run service-build {service}               # Build Lambda package
+poetry run service-update {service} -y           # Update Lambda code
+poetry run dump-raw                              # Dump DynamoDB table
+python scripts/cloudwatch_mgmt.py dump-logs {lambda-name} --hours 2
+```
+
+## Error Handling
+
+- Always return structured JSON errors with `error` and optional `error_code` fields
+- Use HTTP status codes consistently: 400, 401, 403, 404, 422, 429, 500
+- Log errors with context for CloudWatch debugging

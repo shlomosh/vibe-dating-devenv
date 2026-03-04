@@ -1,0 +1,43 @@
+---
+description: CloudFormation template standards for Vibe Dating backend
+globs: backend/**/*.yaml
+alwaysApply: false
+---
+
+# CloudFormation Rules
+
+## Naming Convention
+
+- Stack names: `vibe-dating-{service}-{stack}-{environment}` (e.g., `vibe-dating-user-lambda-dev`)
+- Resource names: `vibe-dating-{resource}-{environment}` (e.g., `vibe-dating-media-dev`)
+- All resources must have `Environment` and `Service` tags
+
+## Stack Organization
+
+Each service has numbered stacks deployed in order:
+```
+src/services/{service}/cloudformation/
+  01-iam.yaml
+  02-lambda.yaml
+  03-apigateway.yaml
+```
+
+## Parameters
+
+- Use `src/config/parameters.yaml` for environment-specific values
+- Common parameters: `Environment`, `DeploymentUUID`, `ApiRegion`, `ApiDomainName`
+- Reference cross-stack outputs via CloudFormation exports
+
+## Lambda Configuration
+
+- Runtime: `python3.11`
+- Memory: 128-256 MB (adjust per function needs)
+- Timeout: 30s default, longer for media processing
+- Environment variables from Secrets Manager ARNs (not plaintext secrets)
+
+## Security
+
+- IAM roles follow least-privilege principle
+- DynamoDB uses KMS encryption
+- S3 blocks public access
+- API Gateway uses custom JWT authorizer

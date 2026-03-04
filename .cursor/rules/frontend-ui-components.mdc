@@ -1,0 +1,58 @@
+---
+description: UI component patterns for Vibe Dating frontend
+globs: frontend/src/components/**/*.tsx
+alwaysApply: false
+---
+
+# UI Component Rules
+
+## shadcn/ui Components
+
+This project uses shadcn/ui (Radix UI + Tailwind). Available primitives in `src/components/ui/`:
+
+alert, avatar, badge, button, card, checkbox, collapsible, command, dialog, drawer, input, label, multi-select, popover, radio-group, scroll-area, select, separator, sheet, slider, textarea, tooltip
+
+When building UI, compose from these existing primitives before creating custom ones.
+
+## Component Structure
+
+```tsx
+// 1. Imports
+import { useState } from "react"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+
+// 2. Types
+interface FeatureCardProps {
+  title: string
+  onAction: () => void
+  children: React.ReactNode
+}
+
+// 3. Component
+export function FeatureCard({ title, onAction, children }: FeatureCardProps) {
+  const [isExpanded, setIsExpanded] = useState(false)
+
+  return (
+    <Card>
+      <CardHeader>{title}</CardHeader>
+      <CardContent>{children}</CardContent>
+    </Card>
+  )
+}
+```
+
+## Patterns
+
+- Use `Drawer` (vaul) for bottom sheets on mobile (this is a mobile-first app)
+- Use `Dialog` for confirmation/alert modals
+- Use `Swiper` for image carousels (profile media gallery)
+- Use `Sheet` for side panels
+- Navigation via `ContentNavigation` with bottom nav bar
+
+## Responsive Design
+
+- This is a **Telegram Mini-App** — design for mobile viewport first
+- Use Tailwind responsive prefixes only when desktop layout differs
+- Touch-friendly tap targets (min 44px)
+- Respect safe areas for Telegram webview

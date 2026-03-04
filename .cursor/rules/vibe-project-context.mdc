@@ -1,0 +1,62 @@
+---
+description: Vibe Dating project context and architecture overview
+globs: 
+alwaysApply: true
+---
+
+# Vibe Dating - Project Context
+
+Vibe Dating is a location-based dating Telegram Mini-App for the LGBTQ+ community.
+
+## Architecture
+
+- **Frontend**: React 18 + TypeScript + Vite + Tailwind CSS v4 + shadcn/ui + Telegram SDK (`@telegram-apps/sdk-react`)
+- **Backend**: Python 3.11+ AWS Serverless (Lambda, API Gateway, DynamoDB, S3, CloudFront)
+- **Auth**: Telegram WebApp authentication -> JWT tokens
+- **Database**: DynamoDB single-table design (`vibe-dating-{env}`) + chat table (`vibe-dating-chat-{env}`)
+- **IaC**: AWS CloudFormation YAML templates
+- **Hosting**: CloudFront + S3 at `tma.vibe-dating.io`
+
+## Repository Layout
+
+```
+frontend/          React/TypeScript Telegram Mini-App (Vite)
+backend/           Python AWS serverless backend (Poetry)
+docs/              Consolidated project documentation
+.cursor/rules/     Cursor AI coding rules
+```
+
+## Key Documentation
+
+- `docs/PROJECT-STATUS.md` — implementation status and gap analysis
+- `docs/architecture/system-architecture.md` — full system architecture and data model
+- `docs/architecture/chat-architecture.md` — chat WebSocket spec
+- `docs/api/api-reference.md` — REST API reference
+- `docs/api/websocket-usage.md` — WebSocket integration guide
+
+## Backend Services (9 Lambdas)
+
+| Service | Lambda | Purpose |
+|---------|--------|---------|
+| Auth | `auth_platform` | Telegram auth + JWT |
+| Auth | `auth_jwt_authorizer` | JWT validation |
+| User | `user_profile_mgmt` | Profile CRUD |
+| User | `user_media_mgmt` | Media upload URLs |
+| User | `user_media_processing` | S3-triggered image processing |
+| User | `user_location_mgmt` | Location update/clear |
+| Feed | `feed_query` | Nearby profiles |
+| Chat | `chat_websocket_mgmt` | WebSocket connect/disconnect |
+| Chat | `chat_websocket_msgs` | sendMessage, typingStatus, flashQueue |
+
+## Data Model
+
+- IDs: 8-character base64 strings (UUID v5)
+- User (1) -> Profiles (1-3) -> Media (0-5 images) + Location History
+- DynamoDB PK format: `ENTITY_TYPE#ID`, SK: `METADATA` or `ENTITY_TYPE#ID`
+
+## Current State
+
+- Backend: All core services deployed and functional
+- Frontend: Auth, profiles, media, location, feed working with real APIs
+- Chat/Inbox: UI done but using **mock data** — WebSocket integration pending
+- Missing: Chat history REST API, match/block system, push notifications

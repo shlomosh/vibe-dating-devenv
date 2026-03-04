@@ -1,0 +1,122 @@
+---
+description: Frontend React/TypeScript coding standards (Cosden Solutions methodology)
+globs: frontend/src/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Frontend Coding Rules (Cosden Solutions Methodology)
+
+## Architecture: Service > Hook > Component
+
+Follow the three-layer separation pattern:
+
+1. **Services** (`src/api/`): API calls, data transformation, business logic
+2. **Hooks** (`src/contexts/`, custom hooks): State management, side effects, data orchestration
+3. **Components** (`src/components/`, `src/pages/`): Pure rendering, UI only
+
+```tsx
+// Service layer — handles API communication
+export const profilesApi = {
+  getProfile: (profileId: string) => authApi.apiRequest(`/profile/${profileId}`, "GET"),
+}
+
+// Hook layer — orchestrates state and side effects
+function useProfile(profileId: string) {
+  const [profile, setProfile] = useState<ProfileRecord | null>(null)
+  useEffect(() => { profilesApi.getProfile(profileId).then(setProfile) }, [profileId])
+  return { profile }
+}
+
+// Component layer — renders UI only
+function ProfileCard({ profile }: { profile: ProfileRecord }) {
+  return <Card><CardContent>{profile.nickName}</CardContent></Card>
+}
+```
+
+## TypeScript Standards
+
+- Use TypeScript for all code; prefer `interface` over `type` for object shapes
+- Avoid enums; use const objects with `as const` or string literal unions
+- Use descriptive names with auxiliary verbs: `isLoading`, `hasError`, `canSubmit`
+- All props must have explicit interfaces; no inline object types
+
+```tsx
+interface UserProfileCardProps {
+  profile: ProfileRecord
+  isActive: boolean
+  onSelect: (profileId: string) => void
+}
+```
+
+## Component Patterns
+
+- Use functional components exclusively (no class components)
+- Export named components (no default exports for components)
+- File structure: exported component, subcomponents, helpers, static content, types
+- Keep components single-responsibility; extract when > 100 lines
+- Use `React.memo` only when profiling shows re-render issues
+
+## State Management
+
+- Use React Context API (project standard — no Redux/Zustand)
+- Provider hierarchy: App > Language > User > Profile > Location > WebSocket > Feed > FiltersDrawer
+- Keep context providers focused on one concern
+- Avoid prop drilling beyond 2 levels — use context instead
+
+## Styling
+
+- **Tailwind CSS v4** with `@tailwindcss/vite` plugin
+- **shadcn/ui** components from `src/components/ui/`
+- Use `cn()` utility from `src/lib/utils` for conditional classes
+- Mobile-first responsive design (this is a Telegram Mini-App)
+- Follow Telegram theme integration via CSS variables
+
+```tsx
+import { cn } from "@/lib/utils"
+
+function StatusBadge({ isOnline }: { isOnline: boolean }) {
+  return <span className={cn("rounded-full px-2 py-1 text-xs", isOnline ? "bg-green-500" : "bg-gray-400")} />
+}
+```
+
+## Naming Conventions
+
+- **Files**: PascalCase for components (`UserProfileCard.tsx`), camelCase for utilities (`localStorage.ts`)
+- **Directories**: lowercase with hyphens for feature folders, PascalCase for component folders
+- **Variables**: camelCase, descriptive with aux verbs (`isLoading`, `hasPermission`)
+- **Interfaces**: PascalCase, no `I` prefix (`ProfileRecord`, not `IProfileRecord`)
+
+## Import Aliases
+
+- Use `@/` path alias (maps to `src/`)
+- Group imports: React, third-party, then project modules
+
+```tsx
+import { useState, useEffect } from "react"
+import { useParams } from "react-router-dom"
+
+import { useProfile } from "@/contexts/ProfileContext"
+import { Card } from "@/components/ui/card"
+```
+
+## Performance
+
+- Lazy-load route pages with `React.lazy()` + `Suspense`
+- Use `useCallback` for event handlers passed as props
+- Minimize re-renders: keep state as close to usage as possible
+- Images: use CloudFront signed URLs with proper cache headers
+- Avoid inline object/array literals in JSX props
+
+## API Integration
+
+- All API calls go through `authApi.apiRequest()` which handles JWT injection
+- WebSocket via `useWebSocket()` context hook
+- Handle loading, error, and empty states for every async operation
+- Use optimistic updates where appropriate (chat messages, profile updates)
+
+## Telegram Mini-App
+
+- Use `@telegram-apps/sdk-react` hooks for platform integration
+- Respect Telegram theme params for consistent styling
+- Handle `EnvUnsupported` state when not running inside Telegram
+- Use Telegram `initData` for authentication flow

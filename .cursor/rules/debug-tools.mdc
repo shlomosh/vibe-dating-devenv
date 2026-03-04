@@ -1,0 +1,51 @@
+---
+description: Debugging and deployment tools reference
+globs: 
+alwaysApply: true
+---
+
+# Debug & Deployment Tools
+
+## Backend (Poetry scripts from `backend/` directory)
+
+```bash
+poetry run service-deploy <service>                    # Deploy CloudFormation stacks
+poetry run service-build <service>                     # Build Lambda zip package
+poetry run service-update <service> -y                 # Update Lambda code only
+poetry run dump-raw                                    # Dump DynamoDB table (raw)
+poetry run dump-as-tree                                # Dump DynamoDB table (tree view)
+```
+
+## Backend Debug Scripts
+
+```bash
+python scripts/cloudwatch_mgmt.py dump-logs <lambda-name> --hours 2   # Lambda logs
+python scripts/mockuser_mgmt.py                                        # Create mock user
+python scripts/secretsmanager_mgmt.py                                  # Manage secrets
+python scripts/dynamodb_mgmt.py                                        # DynamoDB management
+python scripts/apigateway_dump.sh                                      # API Gateway dump
+```
+
+## Lambda Names for Log Queries
+
+- `auth-platform`, `auth-jwt-authorizer`
+- `user-profile-mgmt`, `user-media-mgmt`, `user-media-processing`, `user-location-mgmt`
+- `feed-query`
+- `chat-websocket-mgmt`, `chat-websocket-msgs`
+
+## Frontend (from `frontend/` directory)
+
+```bash
+npm run dev          # Start dev server (Vite + HTTPS via mkcert)
+npm run build        # Production build
+npm run preview      # Preview production build
+```
+
+## Code Locations
+
+- Backend Lambda handlers: `backend/src/services/<service>/aws_lambdas/<lambda>/lambda_function.py`
+- Backend shared code: `backend/src/common/aws_lambdas/core/`
+- Backend CloudFormation: `backend/src/services/<service>/cloudformation/`
+- Frontend API clients: `frontend/src/api/`
+- Frontend contexts: `frontend/src/contexts/`
+- Frontend pages: `frontend/src/pages/`
