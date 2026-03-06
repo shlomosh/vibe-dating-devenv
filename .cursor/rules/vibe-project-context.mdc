@@ -58,5 +58,8 @@ docs/              Consolidated project documentation
 
 - Backend: All core services deployed and functional
 - Frontend: Auth, profiles, media, location, feed working with real APIs
+- Profiles: Support **public** (visible on feed) and **anonymous** (hidden, only posts visible) types
+- Feed Posts: Users can create one active post per profile (text + optional media), shown on nearby feed
+- Feed: Shows public profiles and posts (from both public and anonymous users)
 - Chat/Inbox: UI done but using **mock data** — WebSocket integration pending
 - Missing: Chat history REST API, match/block system, push notifications

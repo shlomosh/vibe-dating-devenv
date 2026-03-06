@@ -7,7 +7,7 @@
 
 ## Executive Summary
 
-Vibe Dating is a location-based dating application running as a Telegram Mini-App. The project consists of a **React/TypeScript frontend** and a **Python/AWS serverless backend**. Core features (auth, profiles, media, location, feed) are production-ready. Real-time chat backend infrastructure is deployed but frontend integration remains on mock data. No matching/blocking system exists yet.
+Vibe Dating is a location-based dating application running as a Telegram Mini-App. The project consists of a **React/TypeScript frontend** and a **Python/AWS serverless backend**. Core features (auth, profiles, media, location, feed) are production-ready. The app supports two profile types: **public** (visible on feed) and **anonymous** (hidden from feed, only visible via posts). Users can create feed posts (text and/or media, one active post per profile) that appear on the nearby feed. Real-time chat backend infrastructure is deployed but frontend integration remains on mock data. No matching/blocking system exists yet.
 
 ---
 
@@ -32,11 +32,11 @@ Vibe Dating is a location-based dating application running as a Telegram Mini-Ap
 | Service | Lambda(s) | Status | Notes |
 |---------|-----------|--------|-------|
 | **Authentication** | `auth_platform`, `auth_jwt_authorizer` | DONE | Telegram auth, JWT issuance & validation |
-| **Profile Management** | `user_profile_mgmt` | DONE | Full CRUD, multi-profile (up to 3), msgspec validation |
+| **Profile Management** | `user_profile_mgmt` | DONE | Full CRUD, multi-profile (up to 3), public/anonymous types, post CRUD |
 | **Media Management** | `user_media_mgmt` | DONE | Presigned S3 uploads, media list/delete |
 | **Media Processing** | `user_media_processing` | DONE | S3-triggered: resize, thumbnail, format conversion |
 | **Location** | `user_location_mgmt` | DONE | Geohash-based location update/clear |
-| **Feed** | `feed_query` | DONE | Nearby profiles with pagination, signed media URLs |
+| **Feed** | `feed_query` | DONE | Nearby profiles + posts, filters anonymous without posts, pagination, signed media URLs |
 | **Chat WebSocket** | `chat_websocket_mgmt` | DONE | $connect / $disconnect with JWT auth |
 | **Chat Messages** | `chat_websocket_msgs` | DONE | sendMessage, typingStatus, flashQueue actions |
 | **Hosting** | (CloudFormation) | DONE | CloudFront + S3 + Route53 |
@@ -58,11 +58,12 @@ Vibe Dating is a location-based dating application running as a Telegram Mini-Ap
 | Feature | Status | Notes |
 |---------|--------|-------|
 | **Telegram Auth** | DONE | Full Telegram WebApp SDK integration, JWT storage |
-| **Profile Setup** | DONE | Create/edit/delete profiles, image upload with crop/zoom |
+| **Profile Setup** | DONE | Create/edit/delete profiles, public/anonymous type toggle, image upload with crop/zoom |
 | **Multi-Profile** | DONE | Up to 3 profiles, profile switcher |
+| **Feed Posts** | DONE | Create/edit/delete posts from feed nav, text + media, drawer UI |
 | **Media Upload** | DONE | Presigned S3, EXIF handling, crop, CloudFront signed URLs |
 | **Location Setup** | DONE | Mapbox integration, geohash |
-| **Feed** | DONE | Nearby profiles from real API, pagination, filters |
+| **Feed** | DONE | Nearby profiles + posts from real API, pagination, filters, combined profile+post cards |
 | **Terms & Conditions** | DONE | Full legal text, acceptance flow |
 | **Localization** | DONE | English (en-US), Hebrew (he-IL) |
 | **Theming** | DONE | Dark/light mode, Telegram theme sync |
@@ -124,12 +125,15 @@ Vibe Dating is a location-based dating application running as a Telegram Mini-Ap
 ## Data Model Summary
 
 ```
-User (1) --> Profiles (1-3) --> Media (0-5 images each)
-                            --> Location History (many, TTL: 2 days)
-                            --> Chat Messages (via WebSocket)
+User (1) --> Profiles (1-3, public or anonymous)
+                --> Media (0-5 images each)
+                --> Post (0-1 active, text + optional media reference)
+                --> Location History (many, TTL: 2 days)
+                --> Chat Messages (via WebSocket)
 
 IDs: 8-character base64 strings (UUID v5 derived)
 DynamoDB: Single-table design with 3 GSIs (main) + 3 GSIs (chat)
+Post fields embedded in profile record (postText, postMediaId, postMediaRecord, postCreatedAt)
 ```
 
 ---
