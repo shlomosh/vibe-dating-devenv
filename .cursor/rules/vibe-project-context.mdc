@@ -51,15 +51,18 @@ docs/              Consolidated project documentation
 ## Data Model
 
 - IDs: 8-character base64 strings (UUID v5)
-- User (1) -> Profiles (1-3) -> Media (0-5 images) + Location History
+- User (1) -> Profiles (1-3) -> Media (0-5 images, association: profile|post) + Location History
 - DynamoDB PK format: `ENTITY_TYPE#ID`, SK: `METADATA` or `ENTITY_TYPE#ID`
+- Post: nested `PostRecord` sub-struct in profile (`content`, `mediaIds[]`, `createdAt`)
+- Media: `MediaRecord` has `association` field (`profile` or `post`) to distinguish usage
 
 ## Current State
 
 - Backend: All core services deployed and functional
 - Frontend: Auth, profiles, media, location, feed working with real APIs
 - Profiles: Support **public** (visible on feed) and **anonymous** (hidden, only posts visible) types
-- Feed Posts: Users can create one active post per profile (text + optional media), shown on nearby feed
+- Feed Posts: Users can create one active post per profile (content + optional media), shown on nearby feed
 - Feed: Shows public profiles and posts (from both public and anonymous users)
+- Media: Managed through unified media pipeline with association (profile/post) field
 - Chat/Inbox: UI done but using **mock data** — WebSocket integration pending
 - Missing: Chat history REST API, match/block system, push notifications

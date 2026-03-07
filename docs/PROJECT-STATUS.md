@@ -33,7 +33,7 @@ Vibe Dating is a location-based dating application running as a Telegram Mini-Ap
 |---------|-----------|--------|-------|
 | **Authentication** | `auth_platform`, `auth_jwt_authorizer` | DONE | Telegram auth, JWT issuance & validation |
 | **Profile Management** | `user_profile_mgmt` | DONE | Full CRUD, multi-profile (up to 3), public/anonymous types, post CRUD |
-| **Media Management** | `user_media_mgmt` | DONE | Presigned S3 uploads, media list/delete |
+| **Media Management** | `user_media_mgmt` | DONE | Presigned S3 uploads, media list/delete, association (profile/post) |
 | **Media Processing** | `user_media_processing` | DONE | S3-triggered: resize, thumbnail, format conversion |
 | **Location** | `user_location_mgmt` | DONE | Geohash-based location update/clear |
 | **Feed** | `feed_query` | DONE | Nearby profiles + posts, filters anonymous without posts, pagination, signed media URLs |
@@ -126,14 +126,18 @@ Vibe Dating is a location-based dating application running as a Telegram Mini-Ap
 
 ```
 User (1) --> Profiles (1-3, public or anonymous)
-                --> Media (0-5 images each)
-                --> Post (0-1 active, text + optional media reference)
+                --> Media (0-5 images each, association: profile | post)
+                --> Post (0-1 active, embedded sub-record in profile)
+                      --> content: text (optional)
+                      --> mediaIds: list of media IDs (optional, references profile media with association=post)
+                      --> createdAt: timestamp
                 --> Location History (many, TTL: 2 days)
                 --> Chat Messages (via WebSocket)
 
 IDs: 8-character base64 strings (UUID v5 derived)
 DynamoDB: Single-table design with 3 GSIs (main) + 3 GSIs (chat)
-Post fields embedded in profile record (postText, postMediaId, postMediaRecord, postCreatedAt)
+Media records have association field (profile | post) to distinguish media usage
+Post data stored as nested sub-record (PostRecord) within profile record
 ```
 
 ---

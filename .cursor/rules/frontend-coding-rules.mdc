@@ -21,16 +21,16 @@ export const profilesApi = {
 }
 
 // Hook layer — orchestrates state and side effects
-function useProfile(profileId: string) {
+const useProfile = (profileId: string) => {
   const [profile, setProfile] = useState<ProfileRecord | null>(null)
   useEffect(() => { profilesApi.getProfile(profileId).then(setProfile) }, [profileId])
   return { profile }
 }
 
 // Component layer — renders UI only
-function ProfileCard({ profile }: { profile: ProfileRecord }) {
-  return <Card><CardContent>{profile.nickName}</CardContent></Card>
-}
+const ProfileCard = ({ profile }: { profile: ProfileRecord }) => (
+  <Card><CardContent>{profile.nickName}</CardContent></Card>
+)
 ```
 
 ## TypeScript Standards
@@ -51,6 +51,7 @@ interface UserProfileCardProps {
 ## Component Patterns
 
 - Use functional components exclusively (no class components)
+- Prefer arrow functions for components, hooks, and helpers (`const Foo = () => ...`)
 - Export named components (no default exports for components)
 - File structure: exported component, subcomponents, helpers, static content, types
 - Keep components single-responsibility; extract when > 100 lines
@@ -74,9 +75,9 @@ interface UserProfileCardProps {
 ```tsx
 import { cn } from "@/lib/utils"
 
-function StatusBadge({ isOnline }: { isOnline: boolean }) {
-  return <span className={cn("rounded-full px-2 py-1 text-xs", isOnline ? "bg-green-500" : "bg-gray-400")} />
-}
+const StatusBadge = ({ isOnline }: { isOnline: boolean }) => (
+  <span className={cn("rounded-full px-2 py-1 text-xs", isOnline ? "bg-green-500" : "bg-gray-400")} />
+)
 ```
 
 ## Naming Conventions
