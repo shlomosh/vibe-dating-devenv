@@ -572,7 +572,17 @@ GET /feed/abc12345/nearby?nextToken=encrypted_pagination_token
       "preventionPractices": "prep",
       "hosting": "hostAndTravel",
       "travelDistance": "city",
-      "mediaIdsAndAttrs": ["media_id_1:", "media_id_2:"], // mediaIdAndAttrs is list of <media_id>:<attributes-as-concatenated-chars> (e.g.: 9BB0GAuZ:XON)
+      "mediaIds": ["media_id_1", "media_id_2"],
+      "mediaRecords": {
+          "media_id_1": {
+              "flags": "",
+              "mimeType": "image/jpeg",
+          },
+          "media_id_2": {
+              "flags": "",
+              "mimeType": "image/jpeg",
+          }
+      },
       "lastDistance": 4071,
       "lastSeen": 1704110400,
       "mediaSignedUrl": {
@@ -586,7 +596,8 @@ GET /feed/abc12345/nearby?nextToken=encrypted_pagination_token
 ```
 
 **Note**: The feed response uses a compact profile format (`ProfileRecordBase`) to optimize bandwidth:
-- `mediaIdsAndAttrs`: Array of strings in format `{mediaId}:{flags}` where flags are optional metadata about the media
+- `mediaIds`: Array of media-ids.
+- `mediaRecords`: Array of media-records with flag / mimeType.
 - `lastDistance`: Last distance from current profile (in meters).
 - `profileName`: Omitted from feed responses for privacy
 - `mediaSignedUrl`: Object with `url` and `expiresAt` fields for CloudFront signed URL access (or empty object `{}` if CloudFront not configured)

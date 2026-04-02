@@ -134,15 +134,23 @@ SK: "MESSAGE#{timestamp}" (timestamp: Unix epoch in ms)
   "chatId": "profileA_profileB",
   "senderProfileId": "profileA",
   "recipientProfileId": "profileB",
-  "content": {
-    "type": "text|image",
-    "data": "message text or S3 URL"
-  },
+  "contentType": "text|image|video|link|location",
+  "content": "<JSON string — see Body Schema below>",
   "status": "sent|delivered|read",
   "createdAt": 1704067200000,
   "TTL": 1735689600
 }
 ```
+
+**Body Schema** — the `content` field is always a JSON-encoded string whose shape depends on `contentType`:
+
+| contentType | JSON shape | Example |
+|-------------|-----------|---------|
+| `text` | `{"text": "<message>"}` | `{"text": "Hello!"}` |
+| `image` | `{"url": "<url>", "mimeType": "<mime>"}` | `{"url": "https://…/img.jpg", "mimeType": "image/jpeg"}` |
+| `video` | `{"url": "<url>", "mimeType": "<mime>"}` | `{"url": "https://…/vid.mp4", "mimeType": "video/mp4"}` |
+| `location` | `{"latitude": <number>, "longitude": <number>}` | `{"latitude": 32.0853, "longitude": 34.7818}` |
+| `link` | `{"url": "<url>", "linkType": "telegram\|general"}` | `{"url": "https://t.me/user", "linkType": "telegram"}` |
 
 **Connection Records**:
 
@@ -203,7 +211,7 @@ SK: "METADATA"
    Example payloads:
 
    ```json
-   { "action": "sendMessage", "messageId": "abcd1234", "senderProfileId": "pAAAAAAA", "recipientProfileId": "pBBBBBBB", "content": "hi", "contentType": "text" }
+   { "action": "sendMessage", "messageId": "abcd1234", "senderProfileId": "pAAAAAAA", "recipientProfileId": "pBBBBBBB", "content": "{\"text\":\"hi\"}", "contentType": "text" }
    ```
 
    ```json
@@ -253,12 +261,21 @@ SK: "METADATA"
    import { useEffect, useRef } from 'react';
    import ReconnectingWebSocket from 'reconnecting-websocket';
 
+   // Body is always a JSON string on the wire. Parsed shapes:
+   // text:     { text: string }
+   // image:    { url: string, mimeType: string }
+   // video:    { url: string, mimeType: string }
+   // location: { latitude: number, longitude: number }
+   // link:     { url: string, linkType: 'telegram' | 'general' }
+   type ChatMessageBody = TextBody | MediaBody | LocationBody | LinkBody;
+
    interface Message {
      messageId: string;
      chatId: string;
      senderProfileId: string;
      recipientProfileId: string;
-     content: { type: 'text' | 'image'; data: string };
+     contentType: 'text' | 'image' | 'video' | 'link' | 'location';
+     content: string; // JSON-encoded ChatMessageBody
      status: 'sent' | 'delivered' | 'read';
      createdAt: number;
    }
@@ -290,12 +307,12 @@ SK: "METADATA"
 
      const sendMessage = (
        recipientProfileId: string,
-       content: string,
-       type: 'text' | 'image'
+       body: ChatMessageBody,
+       contentType: 'text' | 'image' | 'video' | 'link' | 'location'
      ) => {
        if (wsRef.current?.readyState === WebSocket.OPEN) {
          wsRef.current.send(
-           JSON.stringify({ action: 'sendMessage', recipientProfileId, content, type })
+           JSON.stringify({ action: 'sendMessage', recipientProfileId, content: JSON.stringify(body), contentType })
          );
        }
      };
