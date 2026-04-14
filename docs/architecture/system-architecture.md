@@ -47,7 +47,7 @@ The backend is organized into several microservices, each deployed as separate L
 - **Location Management**: `user_location_mgmt` Lambda - Profile location tracking and updates
 
 #### Feed Service
-- **Feed Query**: `feed_query` Lambda - Location-based profile discovery and feed generation
+- **Feed Query**: `feed_query` Lambda - Location-based profile discovery and feed generation; returns full profile objects which the frontend splits into the Peers Profile DB (profile data) and the feed's ordered ID list
 
 #### Chat Service
 - **WebSocket Management**: `chat_websocket_mgmt` Lambda — handles `$connect`/`$disconnect`
@@ -331,7 +331,8 @@ SK: MetadataType#{Timestamp/ID}
 
 ### 3. Communication & Social Features
 - **Chat**: AWS API Gateway WebSocket-based chat service with action-based messaging (`sendMessage`, `typingStatus`)
-- **Profile Context**: Frontend passes profile IDs in chat messages
+- **Profile Context**: Frontend passes profile IDs in chat messages; display data resolved from Peers Profile DB
+- **Lazy Profile Fetching**: When a message arrives from an unknown peer, the frontend calls `GET /profile/{profileId}` and inserts the result into the Peers Profile DB before rendering
 - **Local Storage**: Chat history stored on device
 
 ### 4. Media Management
@@ -441,6 +442,69 @@ interface ProfileDB {
 }
 ```
 
+### Peers Profile DB
+
+The frontend maintains a global, in-memory store of peer profiles available to all components via React Context. This decouples profile data from any single feature so that the feed, chat, and inbox all share one source of truth.
+
+```typescript
+// The full peer profile shape returned by GET /profile/{profileId}
+interface PeerProfile {
+  profileId: string;
+  profileName?: string;
+  nickName?: string;
+  aboutMe?: string;
+  age?: string;
+  sexualPosition?: SexualPositionType;
+  bodyType?: BodyType;
+  mediaIds: string[];
+  mediaRecords: Record<string, MediaRecord>;
+  lastSeen?: number;
+}
+
+// Context value exposed by PeersProfileProvider
+interface PeersProfileContextValue {
+  // Look up a peer profile; undefined means not yet loaded
+  getProfile: (profileId: string) => PeerProfile | undefined;
+  // Bulk-upsert profiles (called by the nearby/feed API response handler)
+  upsertProfiles: (profiles: PeerProfile[]) => void;
+  // Fetch a single profile from the backend and insert it into the store;
+  // no-op if already present. Used by chat/inbox when a sender is unknown.
+  ensureProfile: (profileId: string) => Promise<PeerProfile>;
+}
+```
+
+**Population rules:**
+
+| Event | Action |
+|---|---|
+| Nearby (feed) API response | Call `upsertProfiles` with all returned profile objects |
+| Incoming chat message from unknown peer | Call `ensureProfile(senderProfileId)` → `GET /profile/{profileId}` |
+| Profile already in store | `ensureProfile` is a no-op; no network request |
+
+### Feed
+
+The feed context and page hold **only a list of profile IDs**. All rendering is done by looking up each ID in the Peers Profile DB.
+
+```typescript
+interface FeedContextValue {
+  // Ordered list of profile IDs to display
+  profileIds: string[];
+  isLoading: boolean;
+  hasMore: boolean;
+  // Triggers GET /profile/{activeProfileId}/feed, upserts results into
+  // PeersProfileContext, and appends the returned IDs to profileIds
+  loadMore: () => Promise<void>;
+  refresh: () => Promise<void>;
+}
+```
+
+**Feed API flow:**
+1. Frontend calls `GET /profile/{activeProfileId}/feed` (nearby endpoint).
+2. Response contains full profile objects for nearby peers.
+3. Frontend calls `upsertProfiles(results)` to populate the Peers Profile DB.
+4. Feed context appends only the `profileId` values to its `profileIds` list.
+5. Feed page renders each card by calling `getProfile(profileId)` from context.
+
 ### Chat System
 ```typescript
 interface Message {
@@ -451,12 +515,14 @@ interface Message {
 }
 
 interface Conversation {
-  profile: ProfileRecord;
+  profileId: string;          // key into PeersProfileDB — no profile data embedded
   lastMessage: string;
   lastTime: number;
   unreadCount: number;
 }
 ```
+
+Chat and inbox components resolve display data (name, avatar) by calling `getProfile(profileId)` from `PeersProfileContext`. When an incoming message arrives for an unknown peer, the WebSocket handler calls `ensureProfile(senderProfileId)` before updating the inbox.
 
 ## Core Configuration
 

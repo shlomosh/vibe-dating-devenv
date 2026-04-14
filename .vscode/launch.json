@@ -2,77 +2,31 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Debug: Build Auth Service",
-      "type": "debugpy",
-      "request": "launch",
-      "module": "scripts.service",
-      "args": ["build", "auth"],
-      "console": "integratedTerminal",
-      "cwd": "${workspaceFolder}/backend",
-      "env": {
-        "PYTHONPATH": "${workspaceFolder}/backend/src"
-      }
-    },
-    {
-      "name": "Debug: Deploy Auth Service",
-      "type": "debugpy",
-      "request": "launch",
-      "module": "scripts.service",
-      "args": ["deploy", "auth"],
-      "console": "integratedTerminal",
-      "cwd": "${workspaceFolder}/backend",
-      "env": {
-        "PYTHONPATH": "${workspaceFolder}/backend/src"
-      }
-    },
-    {
-      "name": "Debug: Profile Functionality Test",
-      "type": "debugpy",
-      "request": "launch",
-      "program": "${workspaceFolder}/backend/src/services/user/aws_lambdas/test/test_functionality_profile.py",
-      "console": "integratedTerminal",
-      "cwd": "${workspaceFolder}/backend",
-      "env": {
-        "PYTHONPATH": "${workspaceFolder}/backend/src",
-        "AWS_PROFILE": "vibe-dev"
-      },
-      "justMyCode": false,
-      "stopOnEntry": false
-    },
-    {
-      "name": "Debug Vite Dev Server",
-      "type": "node-terminal",
-      "request": "launch",
-      "command": "npm run dev",
-      "cwd": "${workspaceFolder}/frontend"
-    },
-    {
-      "name": "Debug Vite Dev Server (HTTPS)",
+      "name": "Debug Vite Dev Server (User-1)",
       "type": "node-terminal",
       "request": "launch",
       "command": "npm run dev:https",
-      "cwd": "${workspaceFolder}/frontend"
+      "cwd": "${workspaceFolder}/frontend",
+      "env": {
+        "VITE_TG_MOCK_WEB_APP_DATA": "user=%7B%22id%22%3A485233267%2C%22first_name%22%3A%22Shlomo%22%2C%22last_name%22%3A%22Shachar%22%2C%22username%22%3A%22XomoGo%22%2C%22language_code%22%3A%22en%22%2C%22allows_write_to_pm%22%3Atrue%2C%22photo_url%22%3A%22https%3A%5C%2F%5C%2Ft.me%5C%2Fi%5C%2Fuserpic%5C%2F320%5C%2Fhz_lBwqKghtC8Whuyd_JUoVykTP1XG2D_HPURCnfEKc.svg%22%7D&chat_instance=2514264085585022705&chat_type=sender&auth_date=1752764641&signature=5o5jj_DXhCclyNdwcVPAaDZ-_fwJMrva1gSz1ivdFWYx9xqfZi9Pq5HDCsSDDW_UcqviI8x_g_3fwZecEkpSBw&hash=3e2ec70c877e2e81894b1923e88d3f51e34b0341703ac2c11c8a5b10493105e0",
+        "VITE_TG_MOCK_WEB_APP_VERSION": "8.4",
+        "VITE_TG_MOCK_WEB_APP_PLATFORM": "tdesktop"
+      }
     },
     {
-      "name": "Launch Chrome against localhost",
-      "type": "chrome",
+      "name": "Debug Vite Dev Server (User-2)",
+      "type": "node-terminal",
       "request": "launch",
-      "url": "http://localhost:5173",
-      "webRoot": "${workspaceFolder}/frontend/src",
-      "sourceMaps": true,
-      "sourceMapPathOverrides": {
-        "webpack:///src/*": "${webRoot}/*",
-        "vite:///src/*": "${webRoot}/*"
-      },
-      "userDataDir": "${workspaceFolder}/frontend/.vscode/chrome-debug-profile",
-      "runtimeArgs": [
-        "--disable-web-security",
-        "--disable-features=VizDisplayCompositor",
-        "--remote-debugging-port=9222"
-      ]
-    },
+      "command": "npm run dev:https",
+      "cwd": "${workspaceFolder}/frontend",
+      "env": {
+        "VITE_TG_MOCK_WEB_APP_DATA": "user=%7B%22id%22%3A7732810673%2C%22first_name%22%3A%22Foxy%20%F0%9F%A6%8A%22%2C%22last_name%22%3A%22%22%2C%22username%22%3A%22FoxyJet%22%2C%22language_code%22%3A%22en%22%2C%22allows_write_to_pm%22%3Atrue%2C%22photo_url%22%3A%22https%3A%5C%2F%5C%2Ft.me%5C%2Fi%5C%2Fuserpic%5C%2F320%5C%2F7IoitzSrVLHIakpEuYE4FOXeLGDeF5VxTgQTfzJcbvscwd4F4NcU2BRg-XT2MAg4.svg%22%7D&chat_instance=-6715897917766704171&chat_type=sender&auth_date=1776088023&signature=uirzrEKoayVT3ZUpB5PaU_DEH5xBoHk22wST0vFpHJU5-cnJ2Mk_oxOJqyhwS_h2zvg2nt6l8XDS7hCncafoBA&hash=479f901873329f0cd4e33f9b18c1c227f272f83c925ca6e2a45be388e6cb19d1",
+        "VITE_TG_MOCK_WEB_APP_VERSION": "8.4",
+        "VITE_TG_MOCK_WEB_APP_PLATFORM": "tdesktop"
+      }
+    },    
     {
-      "name": "Launch Chrome with HTTPS",
+      "name": "Launch Chrome (User-1)",
       "type": "chrome",
       "request": "launch",
       "url": "https://localhost:5173",
@@ -91,7 +45,26 @@
       ]
     },
     {
-      "name": "Attach to Chrome",
+      "name": "Launch Chrome (User-2)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "https://localhost:5174",
+      "webRoot": "${workspaceFolder}/frontend/src",
+      "sourceMaps": true,
+      "sourceMapPathOverrides": {
+        "webpack:///src/*": "${webRoot}/*",
+        "vite:///src/*": "${webRoot}/*"
+      },
+      "userDataDir": "${workspaceFolder}/frontend/.vscode/chrome-debug-profile",
+      "runtimeArgs": [
+        "--disable-web-security",
+        "--disable-features=VizDisplayCompositor",
+        "--remote-debugging-port=9223",
+        "--ignore-certificate-errors"
+      ]
+    },
+    {
+      "name": "Attach to Chrome (User-1)",
       "type": "chrome",
       "request": "attach",
       "port": 9222,
@@ -101,6 +74,18 @@
         "webpack:///src/*": "${webRoot}/*",
         "vite:///src/*": "${webRoot}/*"
       }
-    }
+    },
+    {
+      "name": "Attach to Chrome (User-2)",
+      "type": "chrome",
+      "request": "attach",
+      "port": 9223,
+      "webRoot": "${workspaceFolder}/frontend/src",
+      "sourceMaps": true,
+      "sourceMapPathOverrides": {
+        "webpack:///src/*": "${webRoot}/*",
+        "vite:///src/*": "${webRoot}/*"
+      }
+    }    
   ]
 }

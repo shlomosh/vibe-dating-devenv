@@ -154,39 +154,36 @@ SK: "MESSAGE#{timestamp}" (timestamp: Unix epoch in ms)
 
 **Connection Records**:
 
+> **Note**: Connection records are stored in the main **`vibe-dating` table** (not `vibe-dating-chat`), co-located with profile data managed by `ProfileManager`.
+
 **Primary Record Pattern**:
 ```
 PK: "CONNECTION#{profileId}" (String; 8-char base64)
-SK: "METADATA"
+SK: "SESSION"
 ```
 
 **Connection Entity**:
 ```json
 {
   "PK": "CONNECTION#{profileId}",
-  "SK": "METADATA",
+  "SK": "SESSION",
   "connectionId": "websocket_connection_id",
-  "lastConnected": 1704067200,
-  "createdAt": 1704067200
+  "createdAt": "2025-01-01T00:00:00+00:00",
+  "ttl": 1735689600
 }
 ```
 
 #### Global Secondary Indexes (GSIs)
 
-**GSI1 - Message Queries by Recipient**:
+**GSI1 - Offline Message Queue by Recipient**:
 - PK: `PROFILE#{recipientProfileId}`
 - SK: `CHAT#{timestamp}`
-- Use Case: Query unread messages for a specific recipient
+- Use Case: `flash_queue` — retrieve all queued messages for a recipient on reconnect
 
 **GSI2 - Message Queries by Sender**:
 - PK: `SENDER#{senderProfileId}`
 - SK: `MESSAGE#{timestamp}`
 - Use Case: Query sent message history for a specific sender
-
-**GSI3 - Chat History Queries**:
-- PK: `CHAT#{chatId}`
-- SK: `MESSAGE#{timestamp}`
-- Use Case: Query message history for a specific chat
 
 #### Integration with Existing Records
 
@@ -204,9 +201,10 @@ SK: "METADATA"
 
 2. **chat_websocket_msgs** (`$default` with action-based routing):
    - Supports the following actions in the JSON payload:
-     - `sendMessage`: persists and forwards a message, and acks back to the sender with status `SENT` (or `FAILED` on error).
-     - `typingStatus`: forwards typing indicators to the recipient.
-     - `flashQueue`: instructs the server to resend any queued messages for the sender.
+     - `sendMessage`: persists and forwards a message, and acks back to the sender with status `SENT` (or `FAILED` on error). If the recipient is offline or has a stale connection (`GoneException`), the message is stored in `vibe-dating-chat` for later delivery and the sender still receives `SENT`. Stale connection records are cleaned up automatically on `GoneException`.
+     - `typingStatus`: forwards typing indicators to the recipient (fire-and-forget, never queued).
+     - `flashQueue`: delivers all messages queued for the sender from `vibe-dating-chat` (GSI1 query by `PROFILE#{profileId}`). Triggered automatically by the frontend on every (re)connect.
+     - `sendStatus`: forwards a `delivered` or `read` status update from the receiver back to the original sender. If the original sender is offline, the status is queued for delivery on reconnect (`store_if_not_sent=True`).
 
    Example payloads:
 
@@ -220,6 +218,10 @@ SK: "METADATA"
 
    ```json
    { "action": "flashQueue", "senderProfileId": "pAAAAAAA" }
+   ```
+
+   ```json
+   { "action": "sendStatus", "messageId": "abcd1234", "senderProfileId": "pBBBBBBB", "recipientProfileId": "pAAAAAAA", "status": "delivered" }
    ```
 
 ### 4.4 Security
@@ -241,7 +243,7 @@ SK: "METADATA"
 - **Axios**: For REST API calls (consistent with existing API integration).
 - **React Context**: Manage chat state (messages, unread counts) - consistent with existing state management.
 - **Tailwind CSS + shadcn/ui**: Styling; matches Telegram themes (consistent with existing styling).
-- **idb-keyval**: Cache messages locally (`npm i idb-keyval`).
+- **localStorage**: Persist chat messages and inbox state across sessions (see key schema below).
 
 ### 5.2 Components
 
@@ -353,19 +355,44 @@ SK: "METADATA"
    export { uploadImageForChat };
    ```
 
-### 5.3 Integration with System Architecture
+### 5.3 Client-Side Storage
+
+Messages and inbox state are persisted in `localStorage` using the following key schema (defined in `src/config.tsx`):
+
+| Key | Content |
+|-----|---------|
+| `vibe/data/chat/v1/{peerProfileId}` | `{ v: 1, messages: StoredRow[] }` — per-peer chat history (last 400 messages) |
+| `vibe/data/inbox/v1/active_chats` | `{ v: 1, entries: Record<peerProfileId, InboxEntry> }` — inbox state |
+
+An inbox entry is only created when a real message is exchanged; visiting a chat page without sending or receiving a message does not create an entry.
+
+On every WebSocket (re)connect the frontend automatically sends `flashQueue`, which causes the server to push any messages queued while offline. These are merged into `localStorage` on arrival.
+
+### 5.4 Delivery Status Flow
+
+Status follows the WhatsApp scheme — the **receiver** sends status updates back to the original sender:
+
+1. **`sent`** — server acks the `sendMessage` action back to the sender.
+2. **`delivered`** — receiver's `InboxContext` detects the incoming message (background handler, fires even when not on the chat page), debounces 600ms, and sends `sendStatus` with `status: "delivered"` for the last-received message ID. Previous messages in the same burst are implied.
+3. **`read`** — receiver's `useChatPage` detects the last peer message on mount or when a new peer message arrives, debounces 400ms, and sends `sendStatus` with `status: "read"`.
+
+On the sender's side, a single status update upgrades **all prior messages** (by timestamp) that have a lower status rank, so one `read` event marks the entire conversation read. Failed messages are never upgraded.
+
+### 5.5 Integration with System Architecture
 
 - **Profile Context**: Use `ProfileRecord` from system architecture to display sender/recipient details.
 - **Media Validation**: Enforce `media_allowed_formats` (`jpeg,jpg,png,webp`) and `media_max_file_size` (20MB) client-side.
-- **Local Storage**: Cache messages in `idb-keyval` for offline resilience, synced with `vibe-dating-chat`.
 
 ## 6. API Endpoints
 
 ### 6.1 WebSocket Endpoints
 
-- `$connect` - Establish WebSocket connection (Telegram `initData` authenticated)
-- `$disconnect` - Handle connection cleanup
-- `sendMessage` - Send chat message to recipient
+- `$connect` - Establish WebSocket connection (Telegram `initData` authenticated); stores `CONNECTION#{profileId} / SESSION` in the main `vibe-dating` table
+- `$disconnect` - Handle connection cleanup; removes the connection record
+- `sendMessage` - Send chat message; queues for offline recipients; cleans up stale connections on `GoneException`
+- `typingStatus` - Forward typing indicator (fire-and-forget)
+- `flashQueue` - Deliver all queued messages to the caller; auto-triggered by the frontend on every connect
+- `sendStatus` - Forward `delivered`/`read` receipt from receiver to original sender; queued if sender is offline
 
 ### 6.2 REST Endpoints
 
@@ -515,10 +542,11 @@ class CoreSettings:
 ## 13. Future Extensions
 
 ### 13.1 Planned Features
-- **Typing Indicators**: Add WebSocket `typing` action
-- **Read Receipts**: Add `read` action to update message status
+- **Message History REST API**: `GET /profile/{profileId}/chat/{chatId}/history` with pagination (not yet implemented)
 - **Notifications**: Integrate Telegram bot for offline push notifications
 - **Moderation**: Use AWS Comprehend for toxicity detection
+
+> **Implemented** (removed from planned): Typing indicators (`typingStatus`), delivery receipts (`delivered`/`read` via `sendStatus`), offline message queuing, stale connection cleanup.
 
 ### 13.2 Advanced Features
 - **Video Messages**: Extend with AWS Chime SDK
