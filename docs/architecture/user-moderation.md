@@ -23,6 +23,7 @@ This document covers the end-to-end moderation system for the Vibe Dating app: b
 | **Block direction**           | Bi-directional — when P1 blocks Q1, both sides are hidden from each other                                                                                                                                                                                                                                                      |
 | **Block scope**               | Strictly profile-to-profile; only the exact P1↔Q1 pair is affected                                                                                                                                                                                                                                                             |
 | **Chat on block**             | Hard delete — the shared chat thread and all messages are permanently deleted from both sides on block                                                                                                                                                                                                                         |
+| **Logout WebSocket**     | Backend-only message type (`logout`); cannot be sent by clients. When received, frontend clears the JWT and navigates to SplashPage. Intended for kicking online users immediately when a ban is applied                                                                                                                  |
 
 
 ---
@@ -341,6 +342,19 @@ if user and UserManager.is_banned(user):
 ```
 
 The JWT is **never issued** for a banned user. Existing JWTs expire by natural TTL. **Recommended MVP approach:** short JWT TTL (≤15 min) — no ban-list needed, minimal latency overhead.
+
+### 3.5 Kicking online users via Logout
+
+When a ban is applied to a user who currently has an active WebSocket connection, the backend can push a `logout` message to disconnect them immediately without waiting for JWT expiry:
+
+```python
+# After apply_ban() — send Logout to all active connections of this userId
+logout_msg = {"messageType": MessageType.LOGOUT.value}
+for connection_id in ChatManager.get_connections_for_user(subject_user_id):
+    apigw_mgmt.post_to_connection(ConnectionId=connection_id, Data=json.dumps(logout_msg))
+```
+
+This message type is **server-initiated only** — it is not a valid `action` value in client-to-server messages and must not be routed by the `chat_websocket_msgs` handler. See §8.6 for the frontend behaviour.
 
 ---
 
@@ -770,6 +784,29 @@ You can reply to existing conversations but cannot start new ones.
 ### 8.5 Feed-hidden restriction
 
 Users under `feed_hidden` are not notified — their profiles simply stop appearing in others' feeds. This is intentional.
+
+### 8.6 Logout WebSocket message
+
+`messageType: "logout"` is a server-initiated message that carries no payload fields. When `WebSocketContext` receives it, it:
+
+1. Calls `logout()` (clears the JWT from localStorage and wipes auth state)
+2. Navigates to SplashPage (`window.location.hash = '/'`)
+
+The message is intercepted before being forwarded to background or foreground chat handlers — no chat handler sees it.
+
+**Security note:** the `logout` message type must never be accepted as a valid `action` in the client→server direction. The `chat_websocket_msgs` dispatcher rejects any unrecognised action with a 400 error, so a client attempting to spoof this message toward another user's connection simply gets an error back — it has no effect on other connections.
+
+```typescript
+// WebSocketContext.tsx — message listener (simplified)
+client.addMessageListener((message) => {
+  if (message.messageType === 'logout') {
+    void logout().finally(() => { window.location.hash = '/'; });
+    return;  // not forwarded to inbox or chat page handlers
+  }
+  backgroundHandlerRef.current?.(message);
+  messageHandlerRef.current?.(message);
+});
+```
 
 ---
 
