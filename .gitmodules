@@ -1,9 +1,9 @@
 [submodule "backend"]
 	path = backend
-	url = ./backend
+        url = git@github.com:shlomosh/vibe-dating-backend.git
 [submodule "frontend"]
 	path = frontend
-	url = ./frontend
+        url = git@github.com:shlomosh/vibe-dating-frontend.git
 [submodule "dashboard"]
 	path = dashboard
 	url = git@github.com:shlomosh/vibe-dating-dashboard.git

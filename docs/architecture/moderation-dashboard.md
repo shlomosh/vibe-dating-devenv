@@ -1,9 +1,9 @@
-# Moderation platform — architecture & design specification
+# Moderation dashboard — architecture & design specification
 
-This document describes the moderation dashboard (separate from the Telegram mini-app frontend) and the **`admin` backend service** (Lambdas + API Gateway in-repo), aligned with existing Vibe Dating types and AWS serverless patterns.
+Simple staff dashboard for monitoring user activity, reviewing reports, and banning users.
 
 **Related:** [System architecture](./system-architecture.md), [Chat architecture](./chat-architecture.md)  
-**UI template:** [TailAdmin React](https://tailadmin.com/) (Tailwind + React; pair with Vite in a new admin app)
+**UI template:** [TailAdmin React (free)](https://tailadmin.com/) — Tailwind + React; pair with Vite.
 
 ---
 
@@ -11,50 +11,39 @@ This document describes the moderation dashboard (separate from the Telegram min
 
 ### 1.1 User model (`backend/src/common/aws_lambdas/core_types/user.py`)
 
-`UserRecord` already supports operational moderation fields:
+`UserRecord` supports all required moderation fields:
 
-- **`type`**: `UserType` includes `basic`, `admin`, `banned`, `developer` — bans align with `banned`.
+- **`type`**: `UserType` — `basic`, `admin`, `banned`, `developer`.
 - **`moderation: UserModeration`**: `banFrom`, `banTo` (ISO timestamps), `banReason`, `banHistory`, `banCount`, `reportedCount`.
-- **Usage signals**: `loginCount`, `lastActiveAt` / `createdAt` / `updatedAt` (from `UserManager.upsert`), `profileIds`, `activeProfileId`, `platform` / `platformId`, `platformMetadata`, `limits`.
+- **Usage signals**: `loginCount`, `lastActiveAt`, `createdAt`, `updatedAt`, `profileIds`, `platform`, `platformId`.
 
-`UserManager.is_banned()` defines runtime semantics: user is banned if `type == banned` and either `banTo` is missing (permanent) or current time is before parsed `banTo`.
+`UserManager.is_banned()`: user is banned if `type == banned` and `banTo` is missing (permanent) or in the future (temporary).
 
-**Implication:** Ban/unban in the dashboard must update `type` and `moderation` consistently so existing auth/login paths keep working. **Temporary ban** = `type: banned` + `banTo` in the future. **Unban** = restore prior type (typically `basic`) and clear or archive ban fields in `banHistory`.
+**Ban/unban semantics:** Temporary ban = `type: banned` + `banTo` in the future. Unban = restore `type` to `basic` (always) and archive ban fields into `banHistory`.
 
 ### 1.2 Profile model (`backend/src/common/aws_lambdas/core_types/profile.py`)
 
-`ProfileRecord` holds data for profile-card review: `profileType` (`public` / `anonymous`), `profileName`, `nickName`, `aboutMe`, `post` (`PostRecord`: `content`, `mediaIds`, `createdAt`), `mediaRecords` / `mediaIds`, `lastLocation`, `lastSeen`, `ttl`.
+`ProfileRecord`: `profileType` (`public` / `anonymous`), `profileName`, `nickName`, `aboutMe`, `post` (`PostRecord`), `mediaRecords` / `mediaIds`, `lastLocation`, `lastSeen`.
 
-`MediaAttributes` on profile includes `status` (maps to `MediaStatus`: `pending`, `processing`, `ready`, `error`), `association` (`profile` | `post` | `chat`), `mimeType`, `privacy`, `flags`.
-
-**Implication:** Media review should use the same S3 + signed-URL patterns as the app, with **moderator-only** presigned read. Avoid exposing raw bucket keys in the dashboard API; return short-lived URLs.
-
-### 1.3 Gaps today
-
-- **No first-class “report” entity** in code: `reportedCount` is a counter only; chat docs reference reporting as future work.
-- **No `MediaStatus` value** for moderator decisions (e.g. `rejected` / `moderation_hold`): only pipeline states exist.
-
-The moderation project **adds** report records, optional media moderation overlays, and admin APIs — without breaking `msgspec` validation for app-facing writes.
+Media preview in the dashboard uses S3 presigned URLs. Raw bucket keys are never returned by the admin API.
 
 ---
 
 ## 2. Product goals
 
-| # | Capability | Priority |
-|---|------------|----------|
-| 1 | Users/profiles table with filters and usage | P0 |
-| 2 | Ban / unban users | P0 |
-| 3 | Queue of user reports (chat, profile, post/media) | P0 |
-| 4 | Review reported media; allow / remove from product | P0 |
-| 5 | Delete user or single profile (with safeguards) | P1 |
-| 6 | Global usage reports (aggregates + exports) | P1 |
+| # | Capability |
+|---|------------|
+| 1 | Users table with search and basic usage info |
+| 2 | Ban / unban users (temporary or permanent) |
+| 3 | View user profiles and media (read-only) |
+| 4 | Reports queue — list, view, resolve |
 
 ---
 
-## 3. High-level architecture
+## 3. Architecture
 
-- **Dashboard frontend:** New app directory (e.g. `moderation-dashboard/` or `admin-dashboard/`), **not** the Telegram mini-app. Stack: **React + TypeScript + Vite + Tailwind**, shell from **TailAdmin React**. **Authentication:** [Amazon Cognito](https://docs.aws.amazon.com/cognito/latest/developerguide/) User Pool (hosted UI or Amplify Auth in the SPA). Note: the main app uses Tailwind v4; align or adapt TailAdmin component utilities when integrating.
-- **Backend service name:** **`admin`**. Code and CloudFormation live under **`backend/src/services/admin/`** (same patterns as other services: Lambdas, `msgspec` in `core_types`, `CommonManager` / `DynamoDBService`). Prefer a **separate HTTP API** (and domain) from the public user API so Cognito staff tokens and Telegram JWT stay isolated.
+- **Frontend:** `admin-dashboard/` directory. Stack: **React + TypeScript + Vite + TailAdmin (free)**. Auth: **Amazon Cognito** (Amplify Auth or Hosted UI).
+- **Backend:** `backend/src/services/admin/` — two Lambdas + a dedicated API Gateway. Separate domain from the public user API so Cognito staff tokens and Telegram JWTs stay isolated.
 
 ```mermaid
 flowchart LR
@@ -67,286 +56,169 @@ flowchart LR
     AUTH[admin_cognito_authorizer Lambda]
     API[admin_api Lambda]
     DDB[(vibe-dating)]
-    CHAT[(vibe-dating-chat)]
     S3[(Media S3)]
-    CW[CloudWatch Logs]
   end
   UI --> COG
   UI --> APIG
-  APIG --> AUTH
-  AUTH --> API
+  APIG -- authorize --> AUTH
+  APIG -- invoke with context --> API
   API --> DDB
-  API --> CHAT
   API --> S3
-  API --> CW
 ```
 
 ---
 
 ## 4. Security and authentication
 
-### 4.1 Dashboard login — Amazon Cognito (required)
+### 4.1 Cognito login
 
-- **Amazon Cognito User Pool** is the **only** staff identity store for the dashboard.
-- **Groups:** at minimum `moderator` and `admin` (Cognito group names match API authorization checks).
-- **Frontend:** Authenticate with Cognito (e.g. **Amplify Auth** + PKCE, or **Hosted UI** redirect). After sign-in, attach **Cognito access token** (or ID token, per authorizer design) to `Authorization: Bearer …` on calls to the admin API.
-- **API Gateway authorizer:** Lambda **`admin_cognito_authorizer`** (parallel to `auth_jwt_authorizer` for the mini-app): validate JWT **issuer** (User Pool), **audience** / client id, **expiry**, and **cognito:groups** (or equivalent claims). Inject into context: `sub` (Cognito user id), `email`, `cognito:groups` / derived role (`moderator` | `admin`).
+- **Amazon Cognito User Pool** is the only staff identity store.
+- **Frontend:** Amplify Auth (PKCE) or Hosted UI redirect. After sign-in, attach the Cognito access token as `Authorization: Bearer …` on all admin API calls.
+- **Lambda authorizer (`admin_cognito_authorizer`):** Validates JWT issuer, audience/client id, and expiry. Injects `sub`, `email`, and `cognito:groups` into the API Gateway context.
+- **Staff accounts** are managed directly in the AWS Console / Cognito Console. No staff CRUD via the dashboard API.
+- **Bootstrap:** First admin user created manually via AWS Console or CLI.
 
-**Do not** reuse Telegram Mini App JWTs for the dashboard: different threat model, rotation, and audience.
+**Do not** reuse Telegram Mini App JWTs for the dashboard.
 
-**Bootstrap:** The **first** admin user is created manually (AWS Console, CLI, or one-off deployment script). After that, **admins add further accounts** via the dashboard (see §4.4).
+### 4.2 Authorization
 
-### 4.2 Authorization matrix
-
-| Action | moderator | admin |
-|--------|-----------|-------|
-| List/search users, profiles, reports | yes | yes |
-| Resolve reports (dismiss / escalate) | yes | yes |
-| Ban/unban | yes (policy-defined) | yes |
-| Delete profile | yes | yes |
-| Delete user (full) | no or dual-control | yes |
-| Change `UserType.admin` / `developer` (app users) | no | yes |
-| Export PII-heavy reports | restricted | yes |
-| **Create staff accounts** (Cognito users + group assignment) | no | **yes** |
-| **Disable / remove staff** (Cognito admin APIs) | no | **yes** |
-| **Promote staff** (`moderator` ↔ `admin` groups) | no | **yes** (policy-defined) |
-
-### 4.3 Audit log (required)
-
-Append-only pattern: separate table `vibe-dating-audit-{env}` or items with `PK = AUDIT#date`, `SK = timestamp#id`.
-
-Fields: `actorStaffId`, `action`, `targetType` (`user` | `profile` | `media` | `report`), target IDs, `payloadSummary`, `ip`, `userAgent`, UTC time.
-
-Mutating admin endpoints should record audit entries (same transaction where possible, or immediately after with idempotency key).
-
-### 4.4 Admin-managed staff accounts (Cognito)
-
-Users in the **`admin`** Cognito group may **provision additional dashboard operators** without using the AWS Console for day-to-day operations.
-
-**Behavior:**
-
-- **Create:** `admin_api` calls **`cognito-idp:AdminCreateUser`** (email/username, optional temporary password, `MessageAction` for invite email). Then **`AdminAddUserToGroup`** to assign `moderator` or `admin`.
-- **List:** **`ListUsers`** / **`AdminListGroupsForUser`** (paginated) for a **Team** screen in the dashboard.
-- **Update:** **`AdminSetUserPassword`** (force change on first login), **`AdminUpdateUserAttributes`**, **`AdminDisableUser`** / **`AdminEnableUser`**.
-- **Remove from dashboard access:** **`AdminRemoveUserFromGroup`** or **`AdminDeleteUser`** (policy: prefer disable over delete for audit trail).
-
-**IAM:** Execution role for `admin_api` grants **only** the target User Pool ARN for these actions.
-
-**Audit:** Every staff CRUD action writes an audit record (`targetType: staff`, Cognito `sub`, action, actor admin `sub`).
-
-**Safeguards:**
-
-- Prevent removing the **last** `admin` group member (or last user matching a break-glass allowlist).
-- Optional **MFA** enforced on the User Pool for `admin` group (Cognito MFA settings + app policy).
+Two Cognito groups: `moderator` and `admin`. For this dashboard both have identical permissions — the distinction is reserved for future policy if needed. All authenticated staff can: list/search users, view profiles, ban/unban, view and resolve reports.
 
 ---
 
-## 5. Data model extensions (DynamoDB)
+## 5. Data model
 
-Remain in **`vibe-dating-{env}`** single-table design unless volume forces a split.
+No new DynamoDB tables or GSIs required. All access uses existing tables and indexes.
 
 ### 5.1 Existing access patterns
 
-- Users: `PK = USER#{userId}`, `SK = METADATA`; **GSI2** indexes all users: `GSI2PK = USER#ALL`, `GSI2SK = USER#{userId}` (see `UserManager.upsert`).
-- Profiles: `PK = PROFILE#{profileId}`, `SK = METADATA`; `GSI1PK = USER#{userId}`, `GSI1SK = PROFILE#{profileId}`.
+- **Users:** `PK = USER#{userId}`, `SK = METADATA`. GSI2 (`GSI2PK = USER#ALL`) lists all users.
+- **Profiles:** `PK = PROFILE#{profileId}`, `SK = METADATA`. GSI1 (`GSI1PK = USER#{userId}`) lists profiles per user.
 
-**List users (admin):** Query `GSI2` with `GSI2PK = USER#ALL`, paginate on `GSI2SK`. At scale, add sparse GSIs for flagged users or use OpenSearch.
+### 5.2 Report entity
 
-### 5.2 Report entity (new)
+Implemented in `core_types/report.py` (`ReportRecord`) and `core/report_utils.py` (`ReportManager`).
 
-**Purpose:** In-app reports from reporter → subject (user/profile/chat message/media).
+**DynamoDB keys** (one record per reporter→violator profile pair):
 
-Suggested keys:
+| Key | Value |
+|-----|-------|
+| `PK` | `PROFILE#{violatorProfileId}` |
+| `SK` | `REPORT#{reporterProfileId}` |
+| `GSI2PK` | `REPORT#ALL` |
+| `GSI2SK` | `REPORT#{reporterProfileId}` |
 
-- `PK = REPORT#{reportId}`, `SK = METADATA`
-- **Queue GSI:** e.g. `GSI4PK = REPORT#OPEN`, `GSI4SK = {createdAt}#{reportId}` — requires a **new GSI** in CloudFormation. Alternative at low volume: `PK = REPORT#QUEUE`, `SK = {status}#{createdAt}#{reportId}` (watch hot partitions).
+The reports queue uses the existing GSI2 with `GSI2PK = REPORT#ALL`. No new GSI needed.
 
-**Illustrative fields:**
+**`ReportRecord` fields:**
 
-- `reportId`, `createdAt`, `updatedAt`, `status` (`open` | `in_review` | `resolved_dismissed` | `resolved_action_taken`)
-- `category` (harassment, spam, underage, impersonation, other)
-- `reporterUserId`, optional `reporterProfileId`
-- `subjectType` (`user` | `profile` | `chat_message` | `media`)
-- `subjectUserId`, `subjectProfileId` as applicable
-- `chatThreadId`, `messageId` (chat table)
-- `mediaId`, `association` (profile/post/chat)
-- `context` (short text; avoid large blobs in DynamoDB)
-- `assignedToStaffId`, `resolutionNote`, `resolvedByStaffId`, `resolvedAt`
-- optional `linkedModerationActionId`
+- `status`: `open` | `in_review` | `resolved_dismissed` | `resolved_action_taken` | `resolved_auto`
+- `category`: `harassment` | `spam` | `underage` | `inappropriate_content` | `impersonation` | `fake_profile` | `solicitation` | `child_safety` | `other`
+- `context`: optional short text from reporter
+- `weight`: int (default `1`)
+- `ttl`: Unix timestamp (auto-expiry)
+- `createdAt`, `updatedAt`: ISO timestamps
 
-**Counters:** On create, increment `user.moderation.reportedCount` on subject user. Document whether `reportedCount` is lifetime vs “open reports” only.
+Notes:
+- Frontend sends `subjectProfileId`; backend resolves to `subjectUserId`.
+- `reportedCount` on `UserModeration` is a lifetime counter, incremented on each new report.
 
-### 5.3 Media moderation overlay (new)
+### 5.3 Block entity
 
-Prefer **not** overloading `MediaStatus` for the mobile app unless the enum is extended deliberately.
+Implemented in `core_types/report.py` (`BlockRecord`) and `core/report_utils.py` (`BlockManager`).
 
-**Recommended:** Optional fields on `profile.mediaRecords[mediaId]`:
-
-- `moderationStatus`: `approved` | `rejected` | `pending_review`
-- `moderationReason`, `moderatedAt`, `moderatedByStaffId`
-
-**Alternative:** `PK = MEDIA_MOD#{mediaId}`, `SK = METADATA` with `profileId` / `userId` for joins.
-
-**Product:** `feed_query` and chat surfaces exclude `rejected` (and optionally `pending_review`). In-app copy for owners is a product decision.
-
-### 5.4 Soft delete vs hard delete
-
-- **Soft delete:** Tombstone flags + remove feed-related GSIs or stop indexing.
-- **Hard delete:** Remove `USER`, related `PROFILE` items, S3 objects for owned media; define chat retention/redaction policy (legal/product).
-
-Document retention for GDPR / Telegram obligations.
+Two mirrored DynamoDB items per block (one per direction). Dashboard uses this for display only (read-only access to block records).
 
 ---
 
-## 6. Backend service design — `admin` service (Lambdas)
+## 6. Backend — `admin` service
 
 ### 6.1 Lambdas
 
-Stack naming follows the repo convention: **`vibe-dating-admin-*-{environment}`** (see `.cursor/rules/backend-cloudformation.mdc`).
+Stack naming: **`vibe-dating-admin-*-{environment}`**.
 
 | Lambda | Responsibility |
 |--------|----------------|
-| `admin_cognito_authorizer` | Validate Cognito JWT (User Pool); inject `sub`, groups, email into context |
-| `admin_api` | REST routing for all admin dashboard operations (or split read/write later) |
+| `admin_cognito_authorizer` | Validate Cognito JWT; inject `sub`, `email`, groups into context |
+| `admin_api` | All admin REST routes |
 
-Optional:
+### 6.2 REST API (`/admin/v1`)
 
-- `admin_reports_worker` — DynamoDB Streams → notifications
-- `admin_metrics_daily` — EventBridge → aggregates
-
-### 6.2 REST API outline (`/admin/v1`)
-
-Host on a dedicated API (e.g. `https://admin-api.vibe-dating.io`); CORS limited to dashboard origin.
+Dedicated API Gateway; CORS restricted to dashboard origin.
 
 **Users**
 
-- `GET /admin/v1/users` — Cursor pagination; filters: `type`, `banned`, `createdAfter`, `platform`, search
-- `GET /admin/v1/users/{userId}` — Full user (redact sensitive `platformMetadata` if needed)
+- `GET /admin/v1/users` — Paginated list; filters: `banned`, `platform`, text search
+- `GET /admin/v1/users/{userId}` — Full user record
 - `POST /admin/v1/users/{userId}/ban` — Body: `reason`, optional `banTo` (ISO), `permanent`
 - `POST /admin/v1/users/{userId}/unban`
-- `DELETE /admin/v1/users/{userId}` — Hard delete (admin-only); may return async job id
 
 **Profiles**
 
-- `GET /admin/v1/users/{userId}/profiles`
+- `GET /admin/v1/users/{userId}/profiles` — List profiles for a user
 - `GET /admin/v1/profiles/{profileId}` — Full profile + signed media URLs
-- `DELETE /admin/v1/profiles/{profileId}` — Align with existing profile delete / cascade
 
 **Reports**
 
-- `GET /admin/v1/reports?status=&category=&cursor=`
-- `GET /admin/v1/reports/{reportId}`
-- `PATCH /admin/v1/reports/{reportId}` — Assign, status, notes
-- `POST /admin/v1/reports/{reportId}/actions` — Composite actions (ban + reject media + resolve)
+- `GET /admin/v1/reports?status=&category=&cursor=` — Paginated queue
+- `GET /admin/v1/reports/{violatorProfileId}/{reporterProfileId}` — Report detail
+- `PATCH /admin/v1/reports/{violatorProfileId}/{reporterProfileId}` — Update status / notes
 
 **Media**
 
-- `POST /admin/v1/media/{mediaId}/moderate` — Body: `decision` (`allow` | `ban`), `reason`
-- `GET /admin/v1/media/{mediaId}/preview-url` — Short-lived signed URL
+- `GET /admin/v1/media/{mediaId}/preview-url` — Short-lived S3 presigned URL for review
 
-**Analytics**
+**Implementation:** Same handler pattern as existing services: `lambda_handler` → handler class → `ResponseError` / `generate_response` from `rest_utils`; managers for DynamoDB.
 
-- `GET /admin/v1/metrics/summary?from=&to=`
-- `GET /admin/v1/metrics/export?from=&to=&format=csv` — Presigned S3 URL when large
+### 6.3 Ban enforcement
 
-**Staff (Cognito) — `admin` group only**
-
-- `GET /admin/v1/staff` — List pool users / group membership (paginated; dashboard Team page)
-- `POST /admin/v1/staff` — Create user, optional invite email, assign `moderator` | `admin` group
-- `PATCH /admin/v1/staff/{cognitoSub}` — Update attributes, enable/disable, reset password flow
-- `POST /admin/v1/staff/{cognitoSub}/groups` — Add/remove group membership (`moderator` / `admin`)
-
-**Implementation:** Same handler style as existing services: `lambda_handler` → `AdminApiHandler` (name suggestion) → `ResponseError` / `generate_response` from `rest_utils`; managers for DynamoDB; Cognito via `boto3` client with least-privilege IAM.
-
-### 6.3 Chat-linked reports
-
-For reports referencing chat messages: read from **`vibe-dating-chat-{env}`** by thread/message keys. If no public chat history REST API exists yet, **`admin_api`** may query the chat table with read-only IAM.
-
-### 6.4 Ban enforcement vs JWT
-
-On ban: set `UserRecord` fields, append `banHistory`, optionally disconnect WebSockets. Existing JWTs may remain valid until expiry — mitigate via short TTL and/or ban check in authorizer (latency vs security tradeoff).
+On ban: update `UserRecord` fields and append to `banHistory`, then send a logout/disconnect message to the user's active WebSocket session to force them out immediately. No in-app notification. On re-login, `UserManager.is_banned()` detects the ban and the auth flow returns a ban error to the client.
 
 ---
 
-## 7. Frontend dashboard (TailAdmin + Vite)
+## 7. Frontend (TailAdmin free + Vite)
 
 ### 7.1 Setup
 
-- Vite + React + TypeScript; integrate TailAdmin layout (sidebar, header, dark mode).
-- Env: `VITE_ADMIN_API_BASE`, **`VITE_COGNITO_USER_POOL_ID`**, **`VITE_COGNITO_CLIENT_ID`**, **`VITE_COGNITO_REGION`** (and Hosted UI domain if used).
-- **Amazon Cognito** for sign-in; HTTP client sends **Cognito JWT** to API Gateway and refreshes tokens per Amplify/session policy.
+- Vite + React + TypeScript; TailAdmin free template for layout (sidebar, header).
+- Env vars: `VITE_ADMIN_API_BASE`, `VITE_COGNITO_USER_POOL_ID`, `VITE_COGNITO_CLIENT_ID`, `VITE_COGNITO_REGION`.
+- Amplify Auth handles token refresh automatically.
 
-### 7.2 Page map
+### 7.2 Pages
 
-| Page | Purpose |
+| Page | Content |
 |------|---------|
-| Login | Cognito sign-in (Hosted UI or embedded Amplify flow) |
-| **Team** | **Admin-only:** list staff, invite new moderators/admins, disable users, manage groups |
-| Home | KPIs: open reports, bans today, new users |
-| Users | Table: userId, platform, platformId, type, loginCount, lastActive, reportedCount, ban status, profile count |
-| User detail | Tabs: Overview, Profiles, Reports, Ban actions, Danger zone |
-| Profiles | Search by profileId / userId; cards + thumbnails |
-| Reports queue | Filters, assignment, bulk assign |
-| Report detail | Report metadata + profile card + chat excerpt + media |
-| Media review | Queue for pending/reported media |
-| Analytics | Charts and date ranges |
-| Audit log | Search by actor / target |
-| Settings | Feature flags (read-only initially) |
+| Login | Cognito sign-in |
+| Home | KPIs: open reports count, active bans, new users today |
+| Users | Table: platform, type, loginCount, lastActive, reportedCount, ban status |
+| User detail | Profile list, ban/unban actions |
+| Reports | Paginated queue with status/category filters |
+| Report detail | Reporter, violator profile card, category, context, media preview, resolve action |
 
-### 7.3 UX
+### 7.3 UX notes
 
-- Destructive actions: typed confirmation; optional dual approval for full user delete.
-- Minimize PII in lists; mask where policy requires.
+- Ban and unban require a single confirmation dialog (no typed confirmation needed for this scale).
+- Report resolution: single dropdown (dismiss / action taken) + optional note.
 
 ---
 
-## 8. Global usage reports
+## 8. Delivery
 
-DynamoDB is weak for ad-hoc global analytics. Tiered approach:
+Single phase. All items are P0:
 
-1. **MVP:** Scheduled daily Lambda writes `PK = METRICS#{YYYYMMDD}`, `SK = SUMMARY`, or increment counters on write paths.
-2. **Scale:** DynamoDB Streams → Firehose → S3 → Athena / QuickSight.
-3. **Export:** CSV to S3 + presigned download URL.
-
----
-
-## 9. Phased delivery
-
-| Phase | Scope |
-|-------|--------|
-| P0 | Cognito User Pool + **`admin_cognito_authorizer`** + **`admin_api`**; user list/detail; ban/unban; audit log; TailAdmin shell; bootstrap first admin |
-| P0.5 | **Team** page + staff CRUD via Cognito admin APIs (admin group only) |
-| P1 | Report CRUD + queue GSI; report detail + signed media; media allow/ban + feed exclusion |
-| P2 | Chat context on reports; user/profile delete + S3 cleanup job |
-| P3 | Metrics rollups + exports; notifications; OpenSearch if needed |
+1. Cognito User Pool + `admin_cognito_authorizer` + `admin_api`
+2. User list, detail, ban/unban
+3. Profile view + media preview URL
+4. Reports queue + report detail + resolve
+5. TailAdmin shell wired to the API
 
 ---
 
-## 10. Open decisions (ADR candidates)
+## 9. Implementation pointers
 
-1. Report queue: new GSI vs queue partition vs OpenSearch.
-2. Ban enforcement: authorizer ban list vs JWT TTL only.
-3. Media ban: hide vs delete S3 objects (cost vs legal hold).
-4. Anonymous profiles: what moderators see vs subject linkage.
-5. **Staff roles:** Whether `admin` vs `moderator` is **only** Cognito groups (recommended) or also mirrored in DynamoDB — app end-user `UserType.admin` remains separate from Cognito staff.
-
----
-
-## 11. Traceability summary
-
-| Requirement | Primary code / store |
-|-------------|----------------------|
-| Ban state | `UserType`, `UserModeration`, `UserManager.is_banned()` |
-| Profile/post review | `ProfileRecord`, `PostRecord`, `mediaRecords` |
-| Report volume hint | `moderation.reportedCount` (needs report write path) |
-| User listing | DynamoDB GSI2 `USER#ALL` |
-
----
-
-## 12. Implementation pointers (repo)
-
-- Types: `backend/src/common/aws_lambdas/core_types/user.py`, `profile.py`, `media.py`
-- User DDB write pattern: `backend/src/common/aws_lambdas/core/user_utils.py` (`UserManager`)
+- Types: `backend/src/common/aws_lambdas/core_types/user.py`, `profile.py`, `media.py`, `report.py`
+- User writes: `backend/src/common/aws_lambdas/core/user_utils.py` (`UserManager`)
 - Profile GSI: `backend/src/common/aws_lambdas/core/profile_utils.py` (`ProfileManager`)
-- **Admin service layout:** `backend/src/services/admin/` (Lambdas: `admin_cognito_authorizer`, `admin_api`; CloudFormation stacks following existing service numbering)
+- Report / block: `backend/src/common/aws_lambdas/core/report_utils.py` (`ReportManager`, `BlockManager`)
+- Admin service: `backend/src/services/admin/`
 - Backend conventions: `.cursor/rules/backend-coding-rules.mdc`, `backend-cloudformation.mdc`
