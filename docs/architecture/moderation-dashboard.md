@@ -25,7 +25,7 @@ Simple staff dashboard for monitoring user activity, reviewing reports, and bann
 
 `ProfileRecord`: `profileType` (`public` / `anonymous`), `profileName`, `nickName`, `aboutMe`, `post` (`PostRecord`), `mediaRecords` / `mediaIds`, `lastLocation`, `lastSeen`.
 
-Media preview in the dashboard uses S3 presigned URLs. Raw bucket keys are never returned by the admin API.
+All profile data — including anonymous profiles — is fully visible to moderators. Media preview uses S3 presigned URLs (5-minute TTL); raw bucket keys are never returned by the admin API.
 
 ---
 
@@ -42,8 +42,8 @@ Media preview in the dashboard uses S3 presigned URLs. Raw bucket keys are never
 
 ## 3. Architecture
 
-- **Frontend:** `admin-dashboard/` directory. Stack: **React + TypeScript + Vite + TailAdmin (free)**. Auth: **Amazon Cognito** (Amplify Auth or Hosted UI).
-- **Backend:** `backend/src/services/admin/` — two Lambdas + a dedicated API Gateway. Separate domain from the public user API so Cognito staff tokens and Telegram JWTs stay isolated.
+- **Frontend:** `dashboard/` directory. Stack: **React 19 + TypeScript + Vite + TailAdmin (free)**. Auth: direct Cognito API calls via `src/lib/cognitoAuth.ts` (no Amplify library).
+- **Backend:** `backend/src/services/admin/` — two Lambdas + a dedicated API Gateway. Mounted at `/admin` base path on the shared `api.vibe-dating.io` custom domain. Separate from the public user API so Cognito staff tokens and Telegram JWTs stay isolated.
 
 ```mermaid
 flowchart LR
@@ -52,7 +52,7 @@ flowchart LR
     COG[Cognito User Pool]
   end
   subgraph aws [AWS]
-    APIG[API Gateway REST Admin]
+    APIG[API Gateway REST Admin\napi.vibe-dating.io/admin]
     AUTH[admin_cognito_authorizer Lambda]
     API[admin_api Lambda]
     DDB[(vibe-dating)]
@@ -72,17 +72,27 @@ flowchart LR
 
 ### 4.1 Cognito login
 
-- **Amazon Cognito User Pool** is the only staff identity store.
-- **Frontend:** Amplify Auth (PKCE) or Hosted UI redirect. After sign-in, attach the Cognito access token as `Authorization: Bearer …` on all admin API calls.
-- **Lambda authorizer (`admin_cognito_authorizer`):** Validates JWT issuer, audience/client id, and expiry. Injects `sub`, `email`, and `cognito:groups` into the API Gateway context.
+- **Amazon Cognito User Pool** (`vibe-admin-pool-{env}`) is the only staff identity store.
+- **Frontend:** Custom `src/lib/cognitoAuth.ts` — direct Cognito API calls using `USER_PASSWORD_AUTH` flow (no Amplify library). After sign-in, attaches the Cognito access token as `Authorization: Bearer …` on all admin API calls. Tokens stored in `localStorage` under key `vibe_admin_tokens`.
+- **First-login flow:** Handles `NEW_PASSWORD_REQUIRED` challenge inline on the sign-in page. Staff enter their new password before proceeding. On first login (or whenever MFA hasn't been enrolled), Cognito returns `MFA_SETUP`: the dashboard calls `AssociateSoftwareToken`, shows a QR code (via `qrcode.react`) and a copyable manual key, then verifies the first TOTP code with `VerifySoftwareToken` before completing sign-in.
+- **Token refresh:** Automatic via `REFRESH_TOKEN_AUTH` on page load using the stored refresh token.
+- **Token validity:** Access token = 8 h, ID token = 8 h, refresh token = 30 days.
+- **Lambda authorizer (`admin_cognito_authorizer`):** Validates Cognito JWT (both access tokens and ID tokens are accepted). Verifies issuer, client ID / audience, and expiry. Injects `sub`, `email`, and `cognito:groups` into the API Gateway context. Authorizer result TTL: 300 s.
 - **Staff accounts** are managed directly in the AWS Console / Cognito Console. No staff CRUD via the dashboard API.
 - **Bootstrap:** First admin user created manually via AWS Console or CLI.
+
+**Cognito pool settings:**
+- Username attribute: email.
+- Password policy: min 12 chars, uppercase, lowercase, numbers, symbols. Temporary password valid 7 days.
+- MFA: **required** TOTP (`SOFTWARE_TOKEN_MFA`, `MfaConfiguration: ON`). Every staff account must enroll an authenticator app.
+- `AllowAdminCreateUserOnly: true` — self-registration is disabled.
+- Auth flows enabled: `USER_PASSWORD_AUTH`, `USER_SRP_AUTH`, `REFRESH_TOKEN_AUTH`.
 
 **Do not** reuse Telegram Mini App JWTs for the dashboard.
 
 ### 4.2 Authorization
 
-Two Cognito groups: `moderator` and `admin`. For this dashboard both have identical permissions — the distinction is reserved for future policy if needed. All authenticated staff can: list/search users, view profiles, ban/unban, view and resolve reports.
+Two Cognito groups: `moderator` (precedence 10) and `admin` (precedence 5). For this dashboard both have identical permissions — the distinction is reserved for future policy if needed. All authenticated staff can: list/search users, view profiles, ban/unban, view and resolve reports.
 
 ---
 
@@ -123,56 +133,56 @@ Notes:
 - Frontend sends `subjectProfileId`; backend resolves to `subjectUserId`.
 - `reportedCount` on `UserModeration` is a lifetime counter, incremented on each new report.
 
-### 5.3 Block entity
-
-Implemented in `core_types/report.py` (`BlockRecord`) and `core/report_utils.py` (`BlockManager`).
-
-Two mirrored DynamoDB items per block (one per direction). Dashboard uses this for display only (read-only access to block records).
-
 ---
 
 ## 6. Backend — `admin` service
 
 ### 6.1 Lambdas
 
-Stack naming: **`vibe-dating-admin-*-{environment}`**.
+Stack naming: **`vibe-admin-*-{environment}`**. Located under `backend/src/services/admin/`.
 
-| Lambda | Responsibility |
-|--------|----------------|
-| `admin_cognito_authorizer` | Validate Cognito JWT; inject `sub`, `email`, groups into context |
-| `admin_api` | All admin REST routes |
+| Lambda | Name | Responsibility |
+|--------|------|----------------|
+| `admin_cognito_authorizer` | `vibe-admin-cognito-authorizer-{env}` | Validate Cognito JWT; inject `sub`, `email`, groups into context |
+| `admin_api` | `vibe-admin-api-{env}` | All dashboard operations |
 
-### 6.2 REST API (`/admin/v1`)
+CloudFormation stacks: 4 sequential templates — `01-iam`, `02-cognito`, `03-lambda`, `04-apigateway`.
 
-Dedicated API Gateway; CORS restricted to dashboard origin.
+### 6.2 API design
 
-**Users**
+One API Gateway (`vibe-admin-api-{env}`) mounted at `/admin` on the shared custom domain. The Lambda handles routing internally based on method + `resource` field.
 
-- `GET /admin/v1/users` — Paginated list; filters: `banned`, `platform`, text search
-- `GET /admin/v1/users/{userId}` — Full user record
-- `POST /admin/v1/users/{userId}/ban` — Body: `reason`, optional `banTo` (ISO), `permanent`
-- `POST /admin/v1/users/{userId}/unban`
+```
+GET    /admin/hello           unauthenticated health check (MOCK, returns {"service":"vibe-admin"})
+GET    /admin/v1  ?resource=<resource>&...filters/ids
+POST   /admin/v1  body: { resource, action, ...payload }
+DELETE /admin/v1  body: { resource, id, ...payload }   (wired in API GW; no handler implemented yet — returns 405)
+```
 
-**Profiles**
+**Resources and operations:**
 
-- `GET /admin/v1/users/{userId}/profiles` — List profiles for a user
-- `GET /admin/v1/profiles/{profileId}` — Full profile + signed media URLs
+| Method | `resource` | Purpose |
+|--------|-----------|---------|
+| `GET` | `users` | List users — filters: `banned`, `platform`, `cursor`, `limit`, text `search` |
+| `GET` | `user` | Single user — param: `userId` |
+| `GET` | `profiles` | List profiles for a user — param: `userId` |
+| `GET` | `profile` | Single profile + signed media URLs (5-min TTL) — param: `profileId` |
+| `GET` | `reports` | Paginated report queue (`ScanIndexForward=False`) — filters: `status`, `category`, `cursor`, `limit` |
+| `GET` | `report` | Single report detail — params: `violatorProfileId`, `reporterProfileId` |
+| `GET` | `media_url` | Short-lived S3 presigned URL (5-min TTL) — param: `mediaId` |
+| `POST` | `ban` | Ban user — payload: `userId`, `reason`, optional `banTo` (absent = permanent) |
+| `POST` | `unban` | Unban user — payload: `userId` |
+| `POST` | `resolve_report` | Resolve report — payload: `violatorProfileId`, `reporterProfileId`, `status`, optional `note` |
 
-**Reports**
+**`resolve_report` accepted statuses:** `in_review`, `resolved_dismissed`, `resolved_action_taken`. (`resolved_auto` is set by automation only.)
 
-- `GET /admin/v1/reports?status=&category=&cursor=` — Paginated queue
-- `GET /admin/v1/reports/{violatorProfileId}/{reporterProfileId}` — Report detail
-- `PATCH /admin/v1/reports/{violatorProfileId}/{reporterProfileId}` — Update status / notes
+**Pagination:** cursor = base64-encoded DynamoDB `LastEvaluatedKey`. Default page size: 50, max: 100.
 
-**Media**
-
-- `GET /admin/v1/media/{mediaId}/preview-url` — Short-lived S3 presigned URL for review
-
-**Implementation:** Same handler pattern as existing services: `lambda_handler` → handler class → `ResponseError` / `generate_response` from `rest_utils`; managers for DynamoDB.
+**Implementation:** Same handler pattern as existing services: `lambda_handler` → handler class → `ResponseError` / `generate_response` from `rest_utils`.
 
 ### 6.3 Ban enforcement
 
-On ban: update `UserRecord` fields and append to `banHistory`, then send a logout/disconnect message to the user's active WebSocket session to force them out immediately. No in-app notification. On re-login, `UserManager.is_banned()` detects the ban and the auth flow returns a ban error to the client.
+On ban: update `UserRecord` fields and append to `banHistory` (via `UserManager.apply_ban`). Then look up active WebSocket connections: for each `profileId` in the user's `profileIds`, fetch `PK=CONNECTION#{profileId}`, `SK=SESSION` from DynamoDB, post a `{"type":"banned","userId":"..."}` payload to the connection via the API Gateway Management API, and delete stale `GoneException` connection records. No in-app notification. On re-login, `UserManager.is_banned()` detects the ban and the auth flow returns a ban error to the client.
 
 ---
 
@@ -180,20 +190,21 @@ On ban: update `UserRecord` fields and append to `banHistory`, then send a logou
 
 ### 7.1 Setup
 
-- Vite + React + TypeScript; TailAdmin free template for layout (sidebar, header).
-- Env vars: `VITE_ADMIN_API_BASE`, `VITE_COGNITO_USER_POOL_ID`, `VITE_COGNITO_CLIENT_ID`, `VITE_COGNITO_REGION`.
-- Amplify Auth handles token refresh automatically.
+- Vite 6 + React 19 + TypeScript 5.7; TailAdmin free template for layout (sidebar, header). No Amplify library.
+- Auth: `src/lib/cognitoAuth.ts` — thin wrapper over the Cognito REST API (`USER_PASSWORD_AUTH`). Token refresh on page load via `AuthContext`.
+- Env vars: `VITE_ADMIN_API_BASE`, `VITE_COGNITO_CLIENT_ID`, `VITE_COGNITO_REGION`.
+- Key dependencies: react-router 7, Tailwind CSS 4, react-helmet-async, clsx, tailwind-merge, qrcode.react (TOTP QR codes).
 
 ### 7.2 Pages
 
-| Page | Content |
-|------|---------|
-| Login | Cognito sign-in |
-| Home | KPIs: open reports count, active bans, new users today |
-| Users | Table: platform, type, loginCount, lastActive, reportedCount, ban status |
-| User detail | Profile list, ban/unban actions |
-| Reports | Paginated queue with status/category filters |
-| Report detail | Reporter, violator profile card, category, context, media preview, resolve action |
+| Page | Route | Status | Content |
+|------|-------|--------|---------|
+| Login | `/login` | **Done** | Cognito sign-in; handles `NEW_PASSWORD_REQUIRED`, `SOFTWARE_TOKEN_MFA`, and `MFA_SETUP` (QR code enrollment) challenges inline |
+| Home | `/` | **Scaffold** | Placeholder — "Moderation tools and user management coming soon" |
+| Users | — | Planned | Table: platform, type, loginCount, lastActive, reportedCount, ban status |
+| User detail | — | Planned | Profile list, ban/unban actions |
+| Reports | — | Planned | Paginated queue with status/category filters |
+| Report detail | — | Planned | Reporter, violator profile card, category, context, media preview, resolve action |
 
 ### 7.3 UX notes
 
@@ -204,13 +215,19 @@ On ban: update `UserRecord` fields and append to `banHistory`, then send a logou
 
 ## 8. Delivery
 
-Single phase. All items are P0:
+### Completed
 
-1. Cognito User Pool + `admin_cognito_authorizer` + `admin_api`
-2. User list, detail, ban/unban
-3. Profile view + media preview URL
+- Cognito User Pool + `admin_cognito_authorizer` + `admin_api` (all operations wired)
+- CloudFormation stacks: IAM, Cognito, Lambda, API Gateway
+- Dashboard shell: auth flow (sign-in, first-login password reset, token refresh, logout)
+
+### Remaining (P0)
+
+1. User list page + search
+2. User detail page + ban/unban actions
+3. Profile view + media preview
 4. Reports queue + report detail + resolve
-5. TailAdmin shell wired to the API
+5. Home page KPIs (open reports count, active bans, new users today)
 
 ---
 
@@ -221,4 +238,5 @@ Single phase. All items are P0:
 - Profile GSI: `backend/src/common/aws_lambdas/core/profile_utils.py` (`ProfileManager`)
 - Report / block: `backend/src/common/aws_lambdas/core/report_utils.py` (`ReportManager`, `BlockManager`)
 - Admin service: `backend/src/services/admin/`
+- Dashboard: `dashboard/src/`
 - Backend conventions: `.cursor/rules/backend-coding-rules.mdc`, `backend-cloudformation.mdc`

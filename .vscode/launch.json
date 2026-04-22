@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Debug Vite Dev Server (User-1)",
+      "name": "Debug App Server (User-1)",
       "type": "node-terminal",
       "request": "launch",
       "command": "npm run dev:https",
@@ -14,7 +14,7 @@
       }
     },
     {
-      "name": "Debug Vite Dev Server (User-2)",
+      "name": "Debug App Server (User-2)",
       "type": "node-terminal",
       "request": "launch",
       "command": "npm run dev:https",
@@ -26,7 +26,7 @@
       }
     },    
     {
-      "name": "Launch Chrome (User-1)",
+      "name": "Launch App Browser (User-1)",
       "type": "chrome",
       "request": "launch",
       "url": "https://localhost:5173",
@@ -45,7 +45,7 @@
       ]
     },
     {
-      "name": "Launch Chrome (User-2)",
+      "name": "Launch App Browser (User-2)",
       "type": "chrome",
       "request": "launch",
       "url": "https://localhost:5174",
@@ -64,7 +64,7 @@
       ]
     },
     {
-      "name": "Attach to Chrome (User-1)",
+      "name": "Attach to App Browser (User-1)",
       "type": "chrome",
       "request": "attach",
       "port": 9222,
@@ -76,7 +76,7 @@
       }
     },
     {
-      "name": "Attach to Chrome (User-2)",
+      "name": "Attach to App Browser (User-2)",
       "type": "chrome",
       "request": "attach",
       "port": 9223,
@@ -86,6 +86,43 @@
         "webpack:///src/*": "${webRoot}/*",
         "vite:///src/*": "${webRoot}/*"
       }
-    }    
+    },
+    {
+      "name": "Debug Dashboard Server",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run dev",
+      "cwd": "${workspaceFolder}/dashboard"
+    },
+    {
+      "name": "Launch Dashboard Browser",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:5175",
+      "webRoot": "${workspaceFolder}/dashboard/src",
+      "sourceMaps": true,
+      "sourceMapPathOverrides": {
+        "webpack:///src/*": "${webRoot}/*",
+        "vite:///src/*": "${webRoot}/*"
+      },
+      "userDataDir": "${workspaceFolder}/dashboard/.vscode/chrome-debug-profile",
+      "runtimeArgs": [
+        "--disable-web-security",
+        "--disable-features=VizDisplayCompositor",
+        "--remote-debugging-port=9224"
+      ]
+    },
+    {
+      "name": "Attach to Dashboard Browser",
+      "type": "chrome",
+      "request": "attach",
+      "port": 9224,
+      "webRoot": "${workspaceFolder}/dashboard/src",
+      "sourceMaps": true,
+      "sourceMapPathOverrides": {
+        "webpack:///src/*": "${webRoot}/*",
+        "vite:///src/*": "${webRoot}/*"
+      }
+    }
   ]
 }
