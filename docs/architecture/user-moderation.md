@@ -46,10 +46,10 @@ This document covers the end-to-end moderation system for the Vibe Dating app: b
             │ DynamoDB write (REPORT#)
             │ Streams trigger
             ▼
-   ┌────────────────────┐
-   │ moderation_auto_   │  ← evaluates weighted restriction rules
-   │ engine Lambda      │    writes restriction, may set UserType.banned
-   └────────────────────┘
+   ┌──────────────────────────┐
+   │ user_report_processing   │  ← sums weights over rolling window;
+   │ Lambda (DynamoDB Stream) │    auto-bans if score ≥ threshold T
+   └──────────────────────────┘
             │
             ▼
    ┌────────────────────┐
@@ -446,11 +446,13 @@ report_category_weights: Dict[str, int] = {
 
 ---
 
-## 5. Automatic Restriction Engine
+## 5. Automatic Report Processing Engine
 
-### 5.1 Lambda: `moderation_auto_engine`
+### 5.1 Lambda: `user_report_processing`
 
-Triggered by **DynamoDB Streams** on `vibe-dating-{env}` for new report items.
+**Location:** `backend/src/services/user/aws_lambdas/user_report_processing/lambda_function.py`
+
+Triggered by **DynamoDB Streams** on `vibe-dating-{env}` for new/modified report items.
 
 Report items have `SK` beginning with `REPORT#`, so the stream filter targets those:
 
@@ -463,49 +465,33 @@ FilterCriteria:
 
 ### 5.2 Evaluation algorithm
 
-Thresholds compare against the **weighted sum** of reports from unique reporters in the rolling 7-day window — not a raw reporter count. Because deduplication is enforced by the PK/SK structure (one record per reporter–subject pair), each reporter contributes its `weight` exactly once regardless of how many times they re-report.
+The function sums the `weight` field of all **open** and **in_review** reports against the subject profile within the rolling `moderation_report_window_days` (X) window. Because deduplication is enforced by the PK/SK structure (one record per reporter–subject pair), each reporter contributes its stored weight exactly once regardless of how many times they re-report.
 
 ```python
-def evaluate_restrictions(subject_user_id: str):
-    # 1. Sum weights from unique reporters in past 7 days (open + in_review)
-    recent_weight_sum = sum_report_weights_7d(subject_user_id)
+def _process_record(record):
+    # 1. Parse stream image; skip non-REPORT# / non-open items
+    subject_profile_id = pk[len("PROFILE#"):]
 
-    # 2. Sum weights across all lifetime reports (any status)
-    lifetime_weight_sum = sum_report_weights_lifetime(subject_user_id)
-
-    # 3. No-op if already banned
-    user = UserManager.get(subject_user_id)
-    if user.type == UserType.BANNED:
+    # 2. Resolve profileId → userId; skip if already banned
+    user_mgr = UserManager(user_id=subject_user_id)
+    if user_mgr.is_banned():
         return
 
-    # 4. Escalating restrictions
-    if recent_weight_sum >= settings.moderation_auto_temp_ban_threshold:
-        apply_temp_ban(
-            subject_user_id,
-            reason="Multiple reports from users",
-            ban_to=now + timedelta(hours=settings.moderation_auto_temp_ban_hours),
-            is_system=True,
-        )
-    elif recent_weight_sum >= settings.moderation_auto_chat_limited_threshold:
-        apply_restriction(subject_user_id, RestrictionType.CHAT_LIMITED, is_system=True)
-        escalate_to_mod_queue(subject_user_id)
-    elif recent_weight_sum >= settings.moderation_auto_feed_hidden_threshold:
-        apply_restriction(subject_user_id, RestrictionType.FEED_HIDDEN, is_system=True)
+    # 3. Sum weights of open/in_review reports in the rolling window
+    weight_sum = _sum_report_weights(table, subject_profile_id, settings.moderation_report_window_days)
 
-    # 5. Lifetime flag — escalate for manual review, do not auto-ban
-    if lifetime_weight_sum >= settings.moderation_lifetime_escalation_threshold:
-        escalate_to_mod_queue(subject_user_id, priority="high")
+    # 4. Auto-ban if threshold crossed
+    if weight_sum >= settings.moderation_auto_temp_ban_threshold:
+        ban_to = now + timedelta(hours=settings.moderation_auto_temp_ban_hours)
+        user_mgr.apply_ban(reason="Multiple reports from users", ban_to=ban_to, is_system=True)
 ```
 
-**Examples with current weights (all = 1):**
+**Examples with current weights (all = 1, window = 7 days, threshold T = 10):**
 
-
-| Unique reporters (7d) | Weight sum | Action                                 |
-| --------------------- | ---------- | -------------------------------------- |
-| 3                     | 3          | `feed_hidden`                          |
-| 5                     | 5          | `chat_limited` + escalate to mod queue |
-| 10                    | 10         | 72h temp ban                           |
-
+| Unique reporters (7d) | Weight sum | Action         |
+| --------------------- | ---------- | -------------- |
+| < 10                  | < 10       | No action      |
+| 10                    | 10         | 72h temp ban   |
 
 **Example after future weight increase (`child_safety = 5`):**
 
@@ -514,25 +500,14 @@ def evaluate_restrictions(subject_user_id: str):
 ### 5.3 Thresholds (configurable via `CoreSettings`)
 
 ```python
+moderation_report_window_days: int = 7           # X — rolling window for weight summation
+moderation_auto_temp_ban_threshold: int = 10     # T — ban trigger threshold
+moderation_auto_temp_ban_hours: int = 72         # temp ban duration
+# Future escalation thresholds (not yet wired to user_report_processing):
 moderation_auto_feed_hidden_threshold: int = 3
 moderation_auto_chat_limited_threshold: int = 5
-moderation_auto_temp_ban_threshold: int = 10
-moderation_auto_temp_ban_hours: int = 72
 moderation_lifetime_escalation_threshold: int = 15
 ```
-
-### 5.4 Escalation record
-
-When the engine escalates to the mod queue it writes:
-
-```
-PK     = REPORT#ESCALATION#{escalationId}
-SK     = METADATA
-GSI4PK = REPORT#STATUS#open
-GSI4SK = PRIORITY#high#{createdAt}#{escalationId}
-```
-
-Fields: `subjectUserId`, `triggerType` (`auto_restriction` | `lifetime_threshold`), `recentWeightSum`, `lifetimeWeightSum`, `appliedRestriction`.
 
 ---
 
@@ -836,13 +811,13 @@ AttributeDefinitions:
 ### 9.2 New Lambda stacks
 
 
-| Stack                       | Lambda                   | Purpose                                            |
-| --------------------------- | ------------------------ | -------------------------------------------------- |
-| `06-reports.yaml`           | `user_report_mgmt`       | Report submission, block CRUD, rate limiting       |
-| `07-moderation-engine.yaml` | `moderation_auto_engine` | DynamoDB Streams → weighted restriction evaluation |
+| Stack                          | Lambda                     | Purpose                                               |
+| ------------------------------ | -------------------------- | ----------------------------------------------------- |
+| `06-reports.yaml`              | `user_report_mgmt`         | Report submission, block CRUD, rate limiting          |
+| `07-report-processing.yaml`    | `user_report_processing`   | DynamoDB Streams → weighted score → auto temp-ban     |
 
 
-`moderation_auto_engine` IAM needs: `dynamodb:GetRecords`, `GetShardIterator`, `DescribeStream`, `ListStreams` on the table stream ARN.
+`user_report_processing` IAM needs: `dynamodb:GetRecords`, `GetShardIterator`, `DescribeStream`, `ListStreams` on the table stream ARN, plus `dynamodb:GetItem` (profile/user reads) and `dynamodb:UpdateItem` (ban write).
 
 ---
 
@@ -854,7 +829,7 @@ AttributeDefinitions:
 | **P0** | `UserModeration` type extensions; ban check in `auth_platform`; denied login screen                                                                                                        |
 | **P1** | `user_report_mgmt` Lambda; report submission API + rate limiting; GSI4 CloudFormation; frontend report UI                                                                                  |
 | **P2** | Block system — DynamoDB storage, `POST/DELETE/GET` endpoints, feed filter, chat enforcement, chat hard-delete on block; frontend block UI                                                  |
-| **P3** | `moderation_auto_engine` — Streams trigger, weighted threshold evaluation, restriction writes, escalation records; `chat_limited` enforcement in chat Lambda; feed filter for restrictions |
+| **P3** | `user_report_processing` — Streams trigger, weighted score over rolling window, auto temp-ban at threshold T; `chat_limited` enforcement in chat Lambda; feed filter for restrictions |
 | **P4** | Media moderation overlay (`MediaAttributes` extension); `feed_query` media filtering; moderator dashboard integration (see moderation-dashboard.md)                                        |
 
 
@@ -873,7 +848,7 @@ AttributeDefinitions:
 | Feed filtering                       | `backend/src/services/feed/` — `feed_query` Lambda                               |
 | Chat restriction + block enforcement | `backend/src/services/chat/` — `chat_websocket_msgs` Lambda                      |
 | Report + block Lambda                | `backend/src/services/user/` — `user_report_mgmt` (new)                          |
-| Auto-engine Lambda                   | `backend/src/services/admin/` — `moderation_auto_engine` (new)                   |
+| Auto-processing Lambda               | `backend/src/services/user/aws_lambdas/user_report_processing/` — `user_report_processing` |
 | Frontend report sheet                | New `ReportSheet` component; entry in `ProfileCard`, `ProfileDetail`, `ChatPage` |
 | Frontend denied login                | New `BannedScreen` replacing splash on 403 from auth                             |
 | Frontend block list                  | New page at `/profile/{id}/blocks` in Settings                                   |
