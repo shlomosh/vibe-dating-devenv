@@ -1,21 +1,21 @@
 ---
-description: Vibe Dating project context and architecture overview
+description: Shoss project context and architecture overview
 globs: 
 alwaysApply: true
 ---
 
-# Vibe Dating - Project Context
+# Shoss - Project Context
 
-Vibe Dating is a location-based dating Telegram Mini-App for the LGBTQ+ community.
+Shoss is a location-based dating Telegram Mini-App for the LGBTQ+ community.
 
 ## Architecture
 
 - **Frontend**: React 18 + TypeScript + Vite + Tailwind CSS v4 + shadcn/ui + Telegram SDK (`@telegram-apps/sdk-react`)
 - **Backend**: Python 3.11+ AWS Serverless (Lambda, API Gateway, DynamoDB, S3, CloudFront)
 - **Auth**: Telegram WebApp authentication -> JWT tokens
-- **Database**: DynamoDB single-table design (`vibe-dating-{env}`) + chat table (`vibe-dating-chat-{env}`)
+- **Database**: DynamoDB single-table design (`shoss-{env}`) + chat table (`shoss-chat-{env}`)
 - **IaC**: AWS CloudFormation YAML templates
-- **Hosting**: CloudFront + S3 at `tma.vibe-dating.io`
+- **Hosting**: CloudFront + S3 at `tma.shoss.io`
 
 ## Repository Layout
 

@@ -1,8 +1,8 @@
-# Vibe Dating App - System Architecture & Data Design
+# Shoss App - System Architecture & Data Design
 
 ## Application Overview
 
-Vibe is a location-based dating application designed as a Telegram Mini-App for the gay community. The app focuses on profile-based interactions, location-aware features, and real-time communication.
+Shoss is a location-based dating application designed as a Telegram Mini-App for the gay community. The app focuses on profile-based interactions, location-aware features, and real-time communication.
 
 ## Core Architecture
 
@@ -52,12 +52,12 @@ The backend is organized into several microservices, each deployed as separate L
 #### Chat Service
 - **WebSocket Management**: `chat_websocket_mgmt` Lambda — handles `$connect`/`$disconnect`
 - **WebSocket Messages**: `chat_websocket_msgs` Lambda — `$default` route with actions: `sendMessage`, `typingStatus`, `flashQueue`
-- **WebSocket API**: `wss://chat.vibe-dating.io/{environment}` (e.g., `dev`, `prod`)
+- **WebSocket API**: `wss://chat.shoss.io/{environment}` (e.g., `dev`, `prd`)
 - **Auth**: JWT via `token` query parameter; authorizer injects `userId` in request context
 
 #### Hosting Service
 - **Frontend Deployment**: AWS CloudFront + S3
-- **Custom Domain**: `tma.vibe-dating.io`
+- **Custom Domain**: `tma.shoss.io`
 - **SSL/TLS**: AWS Certificate Manager
 
 ## Core Infrastructure
@@ -75,11 +75,11 @@ The core service provides foundational AWS infrastructure deployed in order:
 #### Stack Details
 
 **S3 Stack**
-- **Bucket Name**: `vibe-dating-code-{environment}-{deployment-uuid}`
+- **Bucket Name**: `shoss-code-{environment}-{deployment-uuid}`
 - **Features**: Versioning, encryption, public access blocking
 
 **DynamoDB Stack**
-- **Table Name**: `vibe-dating-{environment}`
+- **Table Name**: `shoss-{environment}`
 - **Features**: Single-table design with 4 GSIs, KMS encryption, point-in-time recovery, pay-per-request billing
 
 **IAM Stack**
@@ -147,7 +147,7 @@ User (1) -> Agora Chat ID (1)
 
 ### DynamoDB Schema
 
-#### Single Table Design: `vibe-dating`
+#### Single Table Design: `shoss`
 
 **Partition Key (PK) and Sort Key (SK) Structure**
 ```
@@ -272,8 +272,8 @@ SK: MetadataType#{Timestamp/ID}
   "SK": "MEDIA#{mediaId}",
   "mimeType": "image/jpeg",
   "fileSize": 2048576,
-  "originalUrl": "https://media.vibe-dating.io/media/profileId/0/mediaId.jpg",
-  "thumbnailUrl": "https://media.vibe-dating.io/media/profileId/0/mediaId-tb.jpg",
+  "originalUrl": "https://media.shoss.io/media/profileId/0/mediaId.jpg",
+  "thumbnailUrl": "https://media.shoss.io/media/profileId/0/mediaId-tb.jpg",
   "status": "ready",
   "properties": {
     "width": 1920,
@@ -604,10 +604,10 @@ class CoreSettings:
 python deploy.py
 
 # Deploy to specific environment
-python deploy.py --environment staging
+python deploy.py --environment prd
 
 # Deploy with specific parameters
-python deploy.py --region us-east-1 --profile vibe-dating
+python deploy.py --region us-east-1 --profile shoss
 ```
 
 ### Stack Outputs
@@ -620,4 +620,4 @@ After successful deployment:
 
 ---
 
-*This document provides a comprehensive overview of the Vibe Dating application's system architecture and data design. For specific implementation details, refer to the service-specific documentation.*
+*This document provides a comprehensive overview of the Shoss application's system architecture and data design. For specific implementation details, refer to the service-specific documentation.*

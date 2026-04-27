@@ -1,6 +1,6 @@
 # Likes Management — Architecture & Design Specification
 
-This document describes the Like mechanism for Vibe Dating: how likes are sent, stored, matched, and cleaned up — and the design decisions behind it.
+This document describes the Like mechanism for Shoss: how likes are sent, stored, matched, and cleaned up — and the design decisions behind it.
 
 **Related:** [Chat architecture](./chat-architecture.md), [User moderation](./user-moderation.md)
 

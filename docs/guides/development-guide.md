@@ -31,17 +31,17 @@
 
 1. **AWS Profile Setup**
    ```bash
-   aws configure --profile vibe-dev
+   aws configure --profile shoss-dev
    # Enter your AWS Access Key ID
    # Enter your AWS Secret Access Key
-   # Enter your default region (il-central-1)
+   # Enter your default region (us-east-1)
    # Enter your output format (json)
    ```
 
 2. **Environment Variables**
    ```bash
-   export AWS_PROFILE=vibe-dev
-   export AWS_REGION=il-central-1
+   export AWS_PROFILE=shoss-dev
+   export AWS_REGION=us-east-1
    export ENVIRONMENT=dev
    ```
 
@@ -52,14 +52,14 @@
 1. **Clone Repository**
    ```bash
    git clone <repository-url>
-   cd vibe-dating-backend
+   cd shoss-backend
    ```
 
 2. **Install Dependencies**
    ```bash
    # Install all dependencies
    poetry install
-   
+
    # Install Lambda-specific dependencies
    poetry install --with lambda
    ```
@@ -172,18 +172,18 @@ python scripts/manage_secrets.py get --secret telegram_bot_token
 
 #### Secret Naming Convention
 Secrets are stored with environment-specific naming:
-- Format: `vibe-dating/{secret-name}/{environment}`
+- Format: `shoss/{secret-name}/{environment}`
 - Examples:
-  - `vibe-dating/telegram-bot-token/dev`
-  - `vibe-dating/jwt-secret/prod`
-  - `vibe-dating/agora-app-id/staging`
+  - `shoss/telegram-bot-token/prd`
+  - `shoss/jwt-secret/prd`
+  - `shoss/agora-app-id/prd`
 
 ### Environment Variables
 ```bash
 # Set environment for secrets management
-export ENVIRONMENT=dev|staging|prod
-export AWS_REGION=il-central-1
-export AWS_PROFILE=vibe-dev
+export ENVIRONMENT=dev|prd
+export AWS_REGION=us-east-1
+export AWS_PROFILE=shoss-dev
 ```
 
 ## Code Quality
@@ -226,34 +226,34 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-      
+
       - name: Install Poetry
         run: |
           curl -sSL https://install.python-poetry.org | python3 -
-      
+
       - name: Install dependencies
         run: |
           poetry install --with lambda
-      
+
       - name: Run tests
         run: |
           poetry run service-test auth
-      
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: il-central-1
-      
+          aws-region: us-east-1
+
       - name: Deploy to AWS
         run: |
-          export ENVIRONMENT=prod
+          export ENVIRONMENT=prd
           poetry run service-deploy auth
 ```
 

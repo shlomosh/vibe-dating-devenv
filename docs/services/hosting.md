@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Hosting Service provides static hosting infrastructure for the Vibe Dating App frontend application. It sets up and manages AWS infrastructure for hosting the frontend application on CloudFront under the `tma.vibe-dating.io` domain.
+The Hosting Service provides static hosting infrastructure for the Shoss App frontend application. It sets up and manages AWS infrastructure for hosting the frontend application on CloudFront under the `tma.shoss.io` domain.
 
 ## Architecture
 
@@ -20,7 +20,7 @@ The hosting service consists of three main infrastructure components:
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │   Route53 DNS   │    │ CloudFront CDN   │    │   S3 Bucket     │
 │                 │    │                  │    │                 │
-│ tma.vibe-       │◄───┤ • SSL Certificate│◄───┤ • Frontend      │
+│ tma.shoss-       │◄───┤ • SSL Certificate│◄───┤ • Frontend      │
 │ dating.io       │    │ • Security Headers│   │   Assets        │
 │                 │    │ • Caching        │    │ • Versioning    │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
@@ -49,7 +49,7 @@ The hosting service consists of three main infrastructure components:
 
 ### AWS Requirements
 - AWS CLI configured with appropriate credentials
-- Route53 hosted zone for `vibe-dating.io`
+- Route53 hosted zone for `shoss.io`
 - IAM permissions for CloudFormation, S3, CloudFront, Route53, ACM, and Lambda
 
 ### Frontend Requirements
@@ -60,11 +60,11 @@ The hosting service consists of three main infrastructure components:
 ### Environment Variables
 ```bash
 # Required for build process
-export VIBE_FRONTEND_PATH="/Users/ont/vibe/vibe-dating-backend"
+export SHOSS_FRONTEND_PATH="/Users/ont/vibe/shoss-backend"
 
 # Optional AWS configuration
-export AWS_PROFILE="vibe-dev"
-export AWS_REGION="il-central-1"
+export AWS_PROFILE="shoss-dev"
+export AWS_REGION="us-east-1"
 ```
 
 ## Quick Start
@@ -86,7 +86,7 @@ This will create:
 
 ```bash
 # Set frontend path
-export VIBE_FRONTEND_PATH="/Users/ont/vibe/vibe-dating-backend"
+export SHOSS_FRONTEND_PATH="/Users/ont/vibe/shoss-backend"
 
 # Build and upload frontend assets
 poetry run service-build hosting
@@ -100,7 +100,7 @@ This will:
 
 ### 3. Access Your Application
 
-Your frontend will be available at: `https://tma.vibe-dating.io`
+Your frontend will be available at: `https://tma.shoss.io`
 
 ## Detailed Usage
 
@@ -140,18 +140,18 @@ The hosting service integrates with your frontend build process:
 1. **Vite Configuration**: Uses existing Vite build scripts
 2. **Asset Optimization**: Automatically optimizes and uploads assets
 3. **Cache Management**: Handles CloudFront cache invalidation
-4. **Environment Support**: Supports dev, staging, and production environments
+4. **Environment Support**: Supports dev, prd, and production environments
 
 ### Environment Configuration
 
 The service reads configuration from `src/config/parameters.yaml`:
 
 ```yaml
-Environment: "dev"
+Environment: "prd"
 DeploymentUUID: "8e64f92e-580e-11f0-80ef-00155d453b17"
-AppRegion: "il-central-1"
-AppDomainName: "tma.vibe-dating.io"
-AllowedOrigins: "https://web.telegram.org,https://t.me,https://tma.vibe-dating.io"
+AppRegion: "us-east-1"
+AppDomainName: "tma.shoss.io"
+AllowedOrigins: "https://web.telegram.org,https://t.me,https://tma.shoss.io"
 ```
 
 ## CloudFormation Templates
@@ -169,7 +169,7 @@ Sets up global CDN with advanced features:
 
 Creates a secure S3 bucket for frontend assets:
 
-- **Bucket Name**: `vibe-dating-frontend-{environment}`
+- **Bucket Name**: `shoss-frontend-{environment}`
 - **Security**: Private access, encryption, versioning
 - **Lifecycle**: Automatic cleanup of old versions
 - **Policy**: CloudFront-only access
@@ -270,13 +270,13 @@ aws cloudfront create-invalidation \
 
 ```bash
 # Check frontend path
-echo $VIBE_FRONTEND_PATH
+echo $SHOSS_FRONTEND_PATH
 
 # Verify package.json exists
-ls $VIBE_FRONTEND_PATH/package.json
+ls $SHOSS_FRONTEND_PATH/package.json
 
 # Install dependencies manually
-cd $VIBE_FRONTEND_PATH && npm install
+cd $SHOSS_FRONTEND_PATH && npm install
 ```
 
 #### 2. S3 Upload Fails
@@ -286,7 +286,7 @@ cd $VIBE_FRONTEND_PATH && npm install
 aws sts get-caller-identity
 
 # Verify S3 bucket exists
-aws s3 ls s3://vibe-dating-frontend-dev
+aws s3 ls s3://shoss-frontend-dev
 ```
 
 #### 3. CloudFront Not Updating
@@ -306,7 +306,7 @@ aws cloudfront create-invalidation --distribution-id <DISTRIBUTION_ID> --paths "
 aws route53 list-resource-record-sets --hosted-zone-id <ZONE_ID>
 
 # Verify domain configuration
-nslookup tma.vibe-dating.io
+nslookup tma.shoss.io
 ```
 
 ### Debug Commands
@@ -316,10 +316,10 @@ nslookup tma.vibe-dating.io
 poetry run service-deploy hosting --validate
 
 # Check stack status
-aws cloudformation describe-stacks --stack-name vibe-dating-hosting-s3-dev
+aws cloudformation describe-stacks --stack-name shoss-hosting-s3-dev
 
 # View stack outputs
-aws cloudformation describe-stacks --stack-name vibe-dating-hosting-cloudfront-dev --query 'Stacks[0].Outputs'
+aws cloudformation describe-stacks --stack-name shoss-hosting-cloudfront-dev --query 'Stacks[0].Outputs'
 ```
 
 ## Development
@@ -329,14 +329,14 @@ aws cloudformation describe-stacks --stack-name vibe-dating-hosting-cloudfront-d
 ```bash
 # Clone repository
 git clone <repository-url>
-cd vibe-dating-backend
+cd shoss-backend
 
 # Install dependencies
 poetry install
 
 # Set environment variables
-export VIBE_FRONTEND_PATH="/Users/ont/vibe/vibe-dating-frontend"
-export AWS_PROFILE="vibe-dev"
+export SHOSS_FRONTEND_PATH="/Users/ont/vibe/shoss-frontend"
+export AWS_PROFILE="shoss-dev"
 
 # Run tests
 poetry run service-test hosting
@@ -387,7 +387,7 @@ aws cloudformation validate-template --template-body file://src/services/hosting
 aws cloudfront get-distribution --id <DISTRIBUTION_ID>
 
 # Monitor S3 usage
-aws s3 ls s3://vibe-dating-frontend-dev --recursive --summarize
+aws s3 ls s3://shoss-frontend-dev --recursive --summarize
 ```
 
 ## Security Best Practices

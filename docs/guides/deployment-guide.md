@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Vibe Dating App backend uses a modern Poetry-based deployment system that provides consistent, reproducible deployments across all environments. This guide covers the complete deployment process from local development to production.
+The Shoss App backend uses a modern Poetry-based deployment system that provides consistent, reproducible deployments across all environments. This guide covers the complete deployment process from local development to production.
 
 ## Architecture
 
@@ -17,7 +17,7 @@ The Vibe Dating App backend uses a modern Poetry-based deployment system that pr
 ### Service Structure
 
 ```
-vibe-dating-backend/
+shoss-backend/
 ├── src/services/
 │   └── auth/                    # Authentication Service
 │       ├── aws_lambdas/         # Lambda Functions
@@ -61,17 +61,17 @@ vibe-dating-backend/
 
 1. **AWS Profile Setup**
    ```bash
-   aws configure --profile vibe-dev
+   aws configure --profile shoss-dev
    # Enter your AWS Access Key ID
    # Enter your AWS Secret Access Key
-   # Enter your default region (il-central-1)
+   # Enter your default region (us-east-1)
    # Enter your output format (json)
    ```
 
 2. **Environment Variables**
    ```bash
-   export AWS_PROFILE=vibe-dev
-   export AWS_REGION=il-central-1
+   export AWS_PROFILE=shoss-dev
+   export AWS_REGION=us-east-1
    export ENVIRONMENT=dev
    ```
 
@@ -82,7 +82,7 @@ vibe-dating-backend/
 1. **Clone Repository**
    ```bash
    git clone <repository-url>
-   cd vibe-dating-backend
+   cd shoss-backend
    ```
 
 2. **Install Dependencies**
@@ -198,12 +198,12 @@ poetry run service-deploy auth
 export ENVIRONMENT=dev
 poetry run service-deploy auth
 
-# Staging
-export ENVIRONMENT=staging
+# Production
+export ENVIRONMENT=prd
 poetry run service-deploy auth
 
 # Production
-export ENVIRONMENT=prod
+export ENVIRONMENT=prd
 poetry run service-deploy auth
 ```
 
@@ -211,8 +211,8 @@ poetry run service-deploy auth
 
 #### Stack Details
 
-- **Stack Name**: `vibe-dating-auth-service`
-- **ApiRegion**: `il-central-1` (default)
+- **Stack Name**: `shoss-auth-service`
+- **ApiRegion**: `us-east-1` (default)
 - **Capabilities**: `CAPABILITY_NAMED_IAM` for IAM role creation
 - **Tags**: Environment and Service tags for resource management
 
@@ -226,7 +226,7 @@ Parameters:
     Type: String
     Description: Deployment environment
     Default: "dev"
-    AllowedValues: ["dev", "staging", "prod"]
+    AllowedValues: ["dev", "prd", "prd"]
 ```
 
 ### Manual Deployment Steps
@@ -238,15 +238,15 @@ If you need to deploy manually:
 poetry run service-build auth
 
 # 2. Upload to S3 (if needed)
-aws s3 cp build/lambda/ s3://vibe-dating-code-dev-<uuid-suffix>/lambda/ --recursive
+aws s3 cp build/lambda/ s3://shoss-code-dev-<uuid-suffix>/lambda/ --recursive
 
 # 3. Deploy CloudFormation stack
 aws cloudformation deploy \
   --template-file src/services/auth/cloudformation/template.yaml \
-  --stack-name vibe-dating-auth-service \
+  --stack-name shoss-auth-service \
   --parameter-overrides file://src/config/cloudformation/parameters.yaml \
   --capabilities CAPABILITY_NAMED_IAM \
-  --region il-central-1
+  --region us-east-1
 ```
 
 ## Monitoring & Maintenance
@@ -256,8 +256,8 @@ aws cloudformation deploy \
 #### CloudFormation Events
 ```bash
 aws cloudformation describe-stack-events \
-  --stack-name vibe-dating-auth-service \
-  --region il-central-1
+  --stack-name shoss-auth-service \
+  --region us-east-1
 ```
 
 #### Lambda Metrics
@@ -279,7 +279,7 @@ aws cloudwatch get-metric-statistics \
 aws apigateway update-stage \
   --rest-api-id your-api-id \
   --stage-name dev \
-  --patch-operations op=replace,path=/accessLogSettings/destinationArn,value=arn:aws:logs:il-central-1:account:log-group:/aws/apigateway/vibe-auth
+  --patch-operations op=replace,path=/accessLogSettings/destinationArn,value=arn:aws:logs:us-east-1:account:log-group:/aws/apigateway/shoss-auth
 ```
 
 ### Maintenance Tasks
@@ -337,7 +337,7 @@ poetry run service-build auth
 #### Deployment Failures
 ```bash
 # Check CloudFormation events
-aws cloudformation describe-stack-events --stack-name vibe-dating-auth-service
+aws cloudformation describe-stack-events --stack-name shoss-auth-service
 
 # Validate template
 aws cloudformation validate-template --template-body file://template.yaml
@@ -431,23 +431,23 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: il-central-1
+          aws-region: us-east-1
       
       - name: Deploy to AWS
         run: |
-          export ENVIRONMENT=prod
+          export ENVIRONMENT=prd
           poetry run service-deploy auth
 ```
 
 ### Environment Promotion
 
 ```bash
-# Promote from dev to staging
-export ENVIRONMENT=staging
+# Promote from dev to prd
+export ENVIRONMENT=prd
 poetry run service-deploy auth
 
-# Promote from staging to production
-export ENVIRONMENT=prod
+# Promote from prd to production
+export ENVIRONMENT=prd
 poetry run service-deploy auth
 ```
 

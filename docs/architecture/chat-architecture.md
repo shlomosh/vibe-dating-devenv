@@ -1,4 +1,4 @@
-# Chat Infrastructure Specification for Vibe Dating Mini-App
+# Chat Infrastructure Specification for Shoss Mini-App
 
 ## Document Information
 
@@ -6,19 +6,19 @@
 - **Version**: 3.0
 - **Date**: January 2025
 - **Author**: AI Assistant (Merged from versions 2.0 and 2.1)
-- **Purpose**: This document outlines a comprehensive specification for implementing a real-time chat feature in the Vibe Dating Mini-App, a Telegram-based dating platform for the gay community. It details the architecture, features, design, components, and implementation strategies, integrating with the existing AWS serverless backend (API Gateway, Lambdas, DynamoDB, S3, CloudFront) and React/TypeScript frontend as defined in the Vibe Dating App System Architecture. The system uses profile-ids (8-character base64 strings) for identification, leverages the existing DynamoDB `vibe-dating` table for profiles and media, and uses a separate DynamoDB table `vibe-dating-chat` for chat data. Media handling uses S3 with signed URLs. Authentication is handled by API Gateway using JWT for both REST and WebSocket; WebSocket clients pass the JWT as query parameter `token`. Backend implementation uses Python 3.11+ with internal `core_types` dataclasses for data validation, consistent with the existing codebase.
+- **Purpose**: This document outlines a comprehensive specification for implementing a real-time chat feature in the Shoss Mini-App, a Telegram-based dating platform for the gay community. It details the architecture, features, design, components, and implementation strategies, integrating with the existing AWS serverless backend (API Gateway, Lambdas, DynamoDB, S3, CloudFront) and React/TypeScript frontend as defined in the Shoss App System Architecture. The system uses profile-ids (8-character base64 strings) for identification, leverages the existing DynamoDB `shoss` table for profiles and media, and uses a separate DynamoDB table `shoss-chat` for chat data. Media handling uses S3 with signed URLs. Authentication is handled by API Gateway using JWT for both REST and WebSocket; WebSocket clients pass the JWT as query parameter `token`. Backend implementation uses Python 3.11+ with internal `core_types` dataclasses for data validation, consistent with the existing codebase.
 
 ## 1. Introduction
 
 ### 1.1 Overview
 
-This specification defines the infrastructure for a scalable, real-time chat feature within the Vibe Dating Mini-App, replacing third-party services (e.g., Agora.io) with a custom AWS-based solution. The feature supports one-to-one text and image messaging, persists messages for offline delivery, and integrates seamlessly with the existing AWS-based infrastructure. The design prioritizes serverless architecture for cost efficiency, scalability, and minimal maintenance, leveraging Python 3.11+ with msgspec for data validation, consistent with the existing codebase. Authentication is managed at the API Gateway level using the existing JWT and `initData` authorizers, eliminating the need for Lambda-level authentication logic.
+This specification defines the infrastructure for a scalable, real-time chat feature within the Shoss Mini-App, replacing third-party services (e.g., Agora.io) with a custom AWS-based solution. The feature supports one-to-one text and image messaging, persists messages for offline delivery, and integrates seamlessly with the existing AWS-based infrastructure. The design prioritizes serverless architecture for cost efficiency, scalability, and minimal maintenance, leveraging Python 3.11+ with msgspec for data validation, consistent with the existing codebase. Authentication is managed at the API Gateway level using the existing JWT and `initData` authorizers, eliminating the need for Lambda-level authentication logic.
 
 Key differentiators:
 
-- **Dedicated Chat Storage**: Separate `vibe-dating-chat` DynamoDB table for chat data, distinct from `vibe-dating` table for better separation of concerns.
+- **Dedicated Chat Storage**: Separate `shoss-chat` DynamoDB table for chat data, distinct from `shoss` table for better separation of concerns.
 - **Full integration** with existing AWS stack (API Gateway, Lambdas, DynamoDB, S3, CloudFront).
-- **Use of profile-ids** as 8-character base64 strings for privacy and matching logic, consistent with Vibe's ID system.
+- **Use of profile-ids** as 8-character base64 strings for privacy and matching logic, consistent with Shoss's ID system.
 - **Cost-effective**, pay-per-use pricing without MAU-based tiers.
 - **Secure media handling** via existing S3/CloudFront infrastructure with signed URLs.
 - **Python-based backend** for consistency; authentication offloaded to API Gateway.
@@ -32,9 +32,9 @@ Key differentiators:
 ### 1.3 Assumptions
 
 - **API Gateway authorizer** validates JWT for both WebSocket and REST API calls. WebSocket clients pass `token` (JWT) and `profileId` as query parameters; the authorizer populates `userId` in the Lambda context.
-- **Existing DynamoDB table**: `vibe-dating` (single-table design for profiles, media, etc.).
-- **New DynamoDB table**: `vibe-dating-chat` for chat and connection data.
-- **S3 bucket** `vibe-dating-media-dev` for all media (profile images and chat images); served via CloudFront (`media.vibe-dating.io`). **Note**: There is no separate chat-specific S3 bucket; chat images use the same media bucket as profile images.
+- **Existing DynamoDB table**: `shoss` (single-table design for profiles, media, etc.).
+- **New DynamoDB table**: `shoss-chat` for chat and connection data.
+- **S3 bucket** `shoss-media-prd` for all media (profile images and chat images); served via CloudFront (`media.shoss.io`). **Note**: There is no separate chat-specific S3 bucket; chat images use the same media bucket as profile images.
 - **Frontend runs** in Telegram's webview, supporting WebSockets.
 - **Compliance**: GDPR-compliant with TTL; minimal PII in chat data.
 - **Integration** with existing media management system for image sharing.
@@ -44,12 +44,12 @@ Key differentiators:
 ### 2.1 Functional Requirements
 
 1. **Real-Time Messaging**: Users can send/receive text messages instantly when both are online (matched profiles only).
-2. **Offline Messaging**: Messages to offline users are stored in `vibe-dating-chat` and delivered upon reconnection.
-3. **Image Sharing**: Users upload images to the existing media S3 bucket (`vibe-dating-media-dev`), served via signed CloudFront URLs (`media.vibe-dating.io`).
+2. **Offline Messaging**: Messages to offline users are stored in `shoss-chat` and delivered upon reconnection.
+3. **Image Sharing**: Users upload images to the existing media S3 bucket (`shoss-media-prd`), served via signed CloudFront URLs (`media.shoss.io`).
 4. **Message History**: Load chat history (e.g., last 100 messages per chat) via REST API.
-5. **Read Receipts**: Track message status (sent, delivered, read) in `vibe-dating-chat`.
-6. **Chat Initiation**: Chats require mutual match (verified via `PROFILE` entity in `vibe-dating`).
-7. **Blocking/Reporting**: Integrate with `USER` entity in `vibe-dating` for blocking/reporting.
+5. **Read Receipts**: Track message status (sent, delivered, read) in `shoss-chat`.
+6. **Chat Initiation**: Chats require mutual match (verified via `PROFILE` entity in `shoss`).
+7. **Blocking/Reporting**: Integrate with `USER` entity in `shoss` for blocking/reporting.
 8. **Notifications**: In-app unread message indicators; leverage Telegram bot for notifications if available.
 
 ### 2.2 Non-Functional Requirements
@@ -75,24 +75,24 @@ Key differentiators:
 (Conceptual; implement in Draw.io or Lucidchart)
 
 - **Clients**: React/TypeScript frontend in Telegram webview.
-- **Real-Time Layer**: API Gateway WebSocket API (`wss://chat.vibe-dating.io`) for bidirectional messaging.
+- **Real-Time Layer**: API Gateway WebSocket API (`wss://chat.shoss.io`) for bidirectional messaging.
 - **Backend Processing**: Python 3.11+ Lambdas: `chat_websocket_mgmt` for `$connect`/`$disconnect` and `chat_websocket_msgs` for `$default` (action-based messages).
-- **Storage**: DynamoDB `vibe-dating-chat` table (chat and connection data); `vibe-dating` table (profiles, media).
-- **Media**: Existing S3 bucket (`vibe-dating-media-dev`) for all images including chat; CloudFront (`media.vibe-dating.io`) for delivery.
-- **REST API**: Existing API Gateway (`https://api.vibe-dating.io`) for JWT-validated presigned S3 URLs and history queries.
+- **Storage**: DynamoDB `shoss-chat` table (chat and connection data); `shoss` table (profiles, media).
+- **Media**: Existing S3 bucket (`shoss-media-prd`) for all images including chat; CloudFront (`media.shoss.io`) for delivery.
+- **REST API**: Existing API Gateway (`https://api.shoss.io`) for JWT-validated presigned S3 URLs and history queries.
 
 **Flow**:
 
 1. Client connects via WebSocket (passes `token` (JWT) and `profileId`; API Gateway authorizer validates; `userId` is available in Lambda).
 2. On connect: `chat_websocket_mgmt` stores the connection and may push queued/unread messages.
 3. Messaging: Client sends JSON payloads to `$default` with an `action` field; `chat_websocket_msgs` persists and delivers messages (`sendMessage`), typing indicators (`typingStatus`), or flushes queued messages (`flashQueue`).
-4. Image upload: Client requests presigned S3 URL (existing REST API with JWT), uploads to the existing media bucket (`vibe-dating-media-dev`), sends the resulting URL in a chat message.
+4. Image upload: Client requests presigned S3 URL (existing REST API with JWT), uploads to the existing media bucket (`shoss-media-prd`), sends the resulting URL in a chat message.
 5. History: Planned REST API for older messages; not yet implemented.
 
 ### 3.2 Design Principles
 
 - **Serverless**: Use Lambdas, API Gateway, DynamoDB for zero server management.
-- **Dedicated Chat Table**: Store chat data in `vibe-dating-chat` to separate concerns from `vibe-dating`.
+- **Dedicated Chat Table**: Store chat data in `shoss-chat` to separate concerns from `shoss`.
 - **Event-Driven**: WebSocket routes trigger Python Lambdas; DynamoDB Streams for future extensions.
 - **Separation of Concerns**: Chat records within dedicated table; separate business logic in Python Lambda layers.
 - **Idempotency**: Use 8-character base64 message-ids (UUID v5-derived) to prevent duplicates.
@@ -104,18 +104,18 @@ Key differentiators:
 ### 4.1 AWS Services
 
 - **API Gateway (WebSocket API)**: Manages WebSocket connections; routes: `$connect`, `$disconnect`, `sendMessage`. Authentication via API Gateway authorizer (Telegram `initData`).
-- **API Gateway (REST API)**: Existing (`api.vibe-dating.io`); adds `/profile/{profileId}/chat` and `/chat/presigned-url` endpoints (JWT-authenticated).
+- **API Gateway (REST API)**: Existing (`api.shoss.io`); adds `/profile/{profileId}/chat` and `/chat/presigned-url` endpoints (JWT-authenticated).
 - **Lambdas**: Python 3.11+ with `msgspec`; handle WebSocket logic, message persistence, S3 URL generation.
-- **DynamoDB**: `vibe-dating-chat` table for chat data; `vibe-dating` table for profiles/media.
-- **S3**: Existing media bucket (`vibe-dating-media-dev`) for all images including chat images; private access.
-- **CloudFront**: CDN (`media.vibe-dating.io`) for image delivery.
+- **DynamoDB**: `shoss-chat` table for chat data; `shoss` table for profiles/media.
+- **S3**: Existing media bucket (`shoss-media-prd`) for all images including chat images; private access.
+- **CloudFront**: CDN (`media.shoss.io`) for image delivery.
 - **IAM**: Roles for Lambdas (DynamoDB read/write, S3 put/get, API Gateway Management API).
 - **CloudWatch**: Logs, metrics, alarms (30-day retention).
 - **KMS**: Existing key for DynamoDB encryption.
 
 ### 4.2 Data Models (DynamoDB)
 
-#### vibe-dating-chat Table
+#### shoss-chat Table
 
 **Chat Message Records**:
 
@@ -154,7 +154,7 @@ SK: "MESSAGE#{timestamp}" (timestamp: Unix epoch in ms)
 
 **Connection Records**:
 
-> **Note**: Connection records are stored in the main **`vibe-dating` table** (not `vibe-dating-chat`), co-located with profile data managed by `ProfileManager`.
+> **Note**: Connection records are stored in the main **`shoss` table** (not `shoss-chat`), co-located with profile data managed by `ProfileManager`.
 
 **Primary Record Pattern**:
 ```
@@ -187,7 +187,7 @@ SK: "SESSION"
 
 #### Integration with Existing Records
 
-**vibe-dating Table** (Existing):
+**shoss Table** (Existing):
 - **User**: `PK: USER#{userId}`, `SK: METADATA` (validate user existence)
 - **Profile**: `PK: PROFILE#{profileId}`, `SK: METADATA` (validate matches)
 - **Media**: `PK: PROFILE#{profileId}`, `SK: MEDIA#{mediaId}` (optional; for chat image metadata)
@@ -201,9 +201,9 @@ SK: "SESSION"
 
 2. **chat_websocket_msgs** (`$default` with action-based routing):
    - Supports the following actions in the JSON payload:
-     - `sendMessage`: persists and forwards a message, and acks back to the sender with status `SENT` (or `FAILED` on error). If the recipient is offline or has a stale connection (`GoneException`), the message is stored in `vibe-dating-chat` for later delivery and the sender still receives `SENT`. Stale connection records are cleaned up automatically on `GoneException`.
+     - `sendMessage`: persists and forwards a message, and acks back to the sender with status `SENT` (or `FAILED` on error). If the recipient is offline or has a stale connection (`GoneException`), the message is stored in `shoss-chat` for later delivery and the sender still receives `SENT`. Stale connection records are cleaned up automatically on `GoneException`.
      - `typingStatus`: forwards typing indicators to the recipient (fire-and-forget, never queued).
-     - `flashQueue`: delivers all messages queued for the sender from `vibe-dating-chat` (GSI1 query by `PROFILE#{profileId}`). Triggered automatically by the frontend on every (re)connect.
+     - `flashQueue`: delivers all messages queued for the sender from `shoss-chat` (GSI1 query by `PROFILE#{profileId}`). Triggered automatically by the frontend on every (re)connect.
      - `sendStatus`: forwards a `delivered` or `read` status update from the receiver back to the original sender. If the original sender is offline, the status is queued for delivery on reconnect (`store_if_not_sent=True`).
 
    Example payloads:
@@ -229,8 +229,8 @@ SK: "SESSION"
 - **Authentication**:
   - WebSocket: API Gateway authorizer validates Telegram `initData`; passes `profileId`.
   - REST API: API Gateway authorizer validates JWT; passes `profileId`.
-- **Authorization**: Check `vibe-dating` table (`PROFILE` entity) for match before allowing chat.
-- **Data**: Minimal PII in `vibe-dating-chat` (profile-ids, content only).
+- **Authorization**: Check `shoss` table (`PROFILE` entity) for match before allowing chat.
+- **Data**: Minimal PII in `shoss-chat` (profile-ids, content only).
 - **Media**: S3 bucket private; signed URLs (15-minute expiry).
 - **Network**: HTTPS for REST; WSS for WebSockets; CloudFront enforces SSL.
 
@@ -292,7 +292,7 @@ SK: "SESSION"
      useEffect(() => {
        const initData = window.Telegram.WebApp.initData;
        const ws = new ReconnectingWebSocket(
-         `wss://chat.vibe-dating.io/prod?profileId=${profileId}&initData=${encodeURIComponent(initData)}`
+         `wss://chat.shoss.io/prd?profileId=${profileId}&initData=${encodeURIComponent(initData)}`
        );
        wsRef.current = ws;
 
@@ -336,7 +336,7 @@ SK: "SESSION"
      try {
        // Use the existing media upload endpoint
        const { data: { uploadUrl, mediaUrl } } = await axios.post(
-         `https://api.vibe-dating.io/prod/profile/${profileId}/media`,
+         `https://api.shoss.io/prd/profile/${profileId}/media`,
          { fileType: file.type, mediaType: 'chat_image' },
          { headers: { Authorization: `Bearer ${jwtToken}` } }
        );
@@ -387,7 +387,7 @@ On the sender's side, a single status update upgrades **all prior messages** (by
 
 ### 6.1 WebSocket Endpoints
 
-- `$connect` - Establish WebSocket connection (Telegram `initData` authenticated); stores `CONNECTION#{profileId} / SESSION` in the main `vibe-dating` table
+- `$connect` - Establish WebSocket connection (Telegram `initData` authenticated); stores `CONNECTION#{profileId} / SESSION` in the main `shoss` table
 - `$disconnect` - Handle connection cleanup; removes the connection record
 - `sendMessage` - Send chat message; queues for offline recipients; cleans up stale connections on `GoneException`
 - `typingStatus` - Forward typing indicator (fire-and-forget)
@@ -404,12 +404,12 @@ On the sender's side, a single status update upgrades **all prior messages** (by
 - `POST /profile/{profileId}/media` - Request media upload URL for both profile and chat images (existing endpoint, reused for chat)
 - `GET /profile/{profileId}` - Get profile with media access URLs (existing)
 
-**Note**: Chat images use the existing media upload endpoint (`POST /profile/{profileId}/media`) instead of a separate chat-specific endpoint. This ensures all media uses the same S3 bucket (`vibe-dating-media-dev`) and management system.
+**Note**: Chat images use the existing media upload endpoint (`POST /profile/{profileId}/media`) instead of a separate chat-specific endpoint. This ensures all media uses the same S3 bucket (`shoss-media-prd`) and management system.
 
 ## 7. Implementation Plan
 
 ### 7.1 Phase 1: Core Infrastructure (Week 1-2)
-1. **DynamoDB Schema**: Create `vibe-dating-chat` table with GSI for chat queries
+1. **DynamoDB Schema**: Create `shoss-chat` table with GSI for chat queries
 2. **Lambda Functions**: Implement WebSocket handlers (`chat_connect`, `chat_disconnect`, `chat_send_message`)
 3. **API Gateway**: Configure WebSocket API with Telegram `initData` authorizer
 4. **Core Utilities**: Create ChatManager and ConnectionManager classes
@@ -432,16 +432,16 @@ On the sender's side, a single status update upgrades **all prior messages** (by
 
 ```python
 # DynamoDB Configuration
-CHAT_TABLE_NAME = os.environ.get("CHAT_TABLE_NAME", "vibe-dating-chat")
-PROFILE_TABLE_NAME = os.environ.get("PROFILE_TABLE_NAME", "vibe-dating")
+CHAT_TABLE_NAME = os.environ.get("CHAT_TABLE_NAME", "shoss-chat")
+PROFILE_TABLE_NAME = os.environ.get("PROFILE_TABLE_NAME", "shoss")
 
 # WebSocket Configuration
 WEBSOCKET_ENDPOINT = os.environ.get("WEBSOCKET_ENDPOINT")
 
 # Media Configuration
 # Note: Chat uses the existing media bucket, not a separate bucket
-MEDIA_S3_BUCKET = os.environ.get("MEDIA_S3_BUCKET", "vibe-dating-media-dev")
-CLOUDFRONT_DOMAIN = os.environ.get("CLOUDFRONT_DOMAIN", "media.vibe-dating.io")
+MEDIA_S3_BUCKET = os.environ.get("MEDIA_S3_BUCKET", "shoss-media-prd")
+CLOUDFRONT_DOMAIN = os.environ.get("CLOUDFRONT_DOMAIN", "media.shoss.io")
 
 # Chat Settings
 CHAT_MESSAGE_TTL_DAYS = int(os.environ.get("CHAT_MESSAGE_TTL_DAYS", 365))
@@ -461,8 +461,8 @@ class CoreSettings:
     chat_history_limit: int = 50
     chat_max_message_length: int = 1000
     # Note: Chat uses the existing media_s3_bucket, not a separate bucket
-    # media_s3_bucket: str = "vibe-dating-media-dev"  # Already defined in CoreSettings
-    cloudfront_domain: str = "media.vibe-dating.io"
+    # media_s3_bucket: str = "shoss-media-prd"  # Already defined in CoreSettings
+    cloudfront_domain: str = "media.shoss.io"
 ```
 
 ## 9. Monitoring & Observability
@@ -575,8 +575,8 @@ class CoreSettings:
 - AWS Docs: API Gateway WebSocket, DynamoDB, S3 Presigned URLs
 - Telegram WebApp API: `initData` validation
 - Libraries: `reconnecting-websocket`, `axios`, `idb-keyval`, `msgspec`
-- Vibe Dating System Architecture: Integration patterns and data models
+- Shoss System Architecture: Integration patterns and data models
 
 ---
 
-*This document provides a comprehensive specification for implementing real-time chat functionality within the existing Vibe Dating infrastructure. The design prioritizes integration with existing systems while maintaining scalability, security, and performance requirements. The merged specification combines the best practices from both versions, ensuring consistency with the current system architecture and providing a clear path for implementation.*
+*This document provides a comprehensive specification for implementing real-time chat functionality within the existing Shoss infrastructure. The design prioritizes integration with existing systems while maintaining scalability, security, and performance requirements. The merged specification combines the best practices from both versions, ensuring consistency with the current system architecture and providing a clear path for implementation.*

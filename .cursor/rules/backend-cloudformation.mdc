@@ -1,5 +1,5 @@
 ---
-description: CloudFormation template standards for Vibe Dating backend
+description: CloudFormation template standards for Shoss backend
 globs: backend/**/*.yaml
 alwaysApply: false
 ---
@@ -8,8 +8,8 @@ alwaysApply: false
 
 ## Naming Convention
 
-- Stack names: `vibe-dating-{service}-{stack}-{environment}` (e.g., `vibe-dating-user-lambda-dev`)
-- Resource names: `vibe-dating-{resource}-{environment}` (e.g., `vibe-dating-media-dev`)
+- Stack names: `shoss-{service}-{stack}-{environment}` (e.g., `shoss-user-lambda-dev`)
+- Resource names: `shoss-{resource}-{environment}` (e.g., `shoss-media-prd`)
 - All resources must have `Environment` and `Service` tags
 
 ## Stack Organization

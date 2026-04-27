@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Vibe Dating Backend uses a modular, service-oriented build system that creates optimized Lambda packages for AWS deployment. The build system has been reorganized to provide better separation of concerns and reusability.
+The Shoss Backend uses a modular, service-oriented build system that creates optimized Lambda packages for AWS deployment. The build system has been reorganized to provide better separation of concerns and reusability.
 
 ## Architecture
 

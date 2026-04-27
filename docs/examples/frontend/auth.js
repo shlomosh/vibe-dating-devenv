@@ -1,19 +1,19 @@
 /**
- * Frontend Integration Example for Vibe Authentication Service
+ * Frontend Integration Example for Shoss Authentication Service
  * 
  * This example shows how to integrate the authentication service
  * into a Telegram Mini-App frontend.
  */
 
 // Configuration
-const API_BASE_URL = 'https://your-api-gateway-url.execute-api.il-central-1.amazonaws.com/dev';
+const API_BASE_URL = 'https://your-api-gateway-url.execute-api.us-east-1.amazonaws.com/prd';
 
 /**
  * Authentication Service Class
  */
-class VibeAuthService {
+class ShossAuthService {
     constructor() {
-        this.token = localStorage.getItem('vibe_auth_token');
+        this.token = localStorage.getItem('shoss_auth_token');
         this.userId = localStorage.getItem('user_id');
         this.isAuthenticated = !!this.token;
     }
@@ -82,7 +82,7 @@ class VibeAuthService {
             this.userId = authData.userId;
             this.isAuthenticated = true;
             
-            localStorage.setItem('vibe_auth_token', this.token);
+            localStorage.setItem('shoss_auth_token', this.token);
             localStorage.setItem('user_id', this.userId);
 
             return authData;
@@ -129,7 +129,7 @@ class VibeAuthService {
         this.userId = null;
         this.isAuthenticated = false;
         
-        localStorage.removeItem('vibe_auth_token');
+        localStorage.removeItem('shoss_auth_token');
         localStorage.removeItem('user_id');
     }
 
@@ -146,12 +146,12 @@ class VibeAuthService {
 }
 
 /**
- * API Client for Vibe Dating App
+ * API Client for Shoss App
  * 
  * Note: These endpoints are examples and may not be implemented yet.
  * The actual endpoints will depend on the user, media, and other services.
  */
-class VibeApiClient {
+class ShossApiClient {
     constructor(authService) {
         this.auth = authService;
     }
@@ -239,17 +239,17 @@ class VibeApiClient {
 /**
  * Usage Example
  */
-async function initializeVibeApp() {
+async function initializeShossApp() {
     try {
         // Initialize authentication service
-        const authService = new VibeAuthService();
+        const authService = new ShossAuthService();
         
         // Initialize Telegram authentication
         const authResult = await authService.initialize();
         console.log('Authentication successful:', authResult);
 
         // Create API client
-        const apiClient = new VibeApiClient(authService);
+        const apiClient = new ShossApiClient(authService);
 
         // Example: Get a specific profile
         const profileId = 'example_profile_id';
@@ -279,7 +279,7 @@ async function initializeVibeApp() {
         console.log('Nearby profiles:', nearbyProfiles);
 
     } catch (error) {
-        console.error('Failed to initialize Vibe app:', error);
+        console.error('Failed to initialize Shoss app:', error);
         
         // Show error to user
         if (window.Telegram && window.Telegram.WebApp) {
@@ -291,7 +291,7 @@ async function initializeVibeApp() {
 /**
  * React Hook Example (if using React)
  */
-function useVibeAuth() {
+function useShossAuth() {
     const [authService, setAuthService] = useState(null);
     const [apiClient, setApiClient] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -303,10 +303,10 @@ function useVibeAuth() {
                 setIsLoading(true);
                 setError(null);
 
-                const auth = new VibeAuthService();
+                const auth = new ShossAuthService();
                 await auth.initialize();
                 
-                const api = new VibeApiClient(auth);
+                const api = new ShossApiClient(auth);
                 
                 setAuthService(auth);
                 setApiClient(api);
@@ -327,9 +327,9 @@ function useVibeAuth() {
 // Export for use in other modules
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
-        VibeAuthService,
-        VibeApiClient,
-        initializeVibeApp,
-        useVibeAuth
+        ShossAuthService,
+        ShossApiClient,
+        initializeShossApp,
+        useShossAuth
     };
 } 

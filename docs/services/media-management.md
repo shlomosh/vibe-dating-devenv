@@ -11,7 +11,7 @@ This document specifies the backend implementation for media upload, processing,
 - **Media Processing**: User Service (`src/services/user/aws_lambdas/user_media_processing/`)
 
 ### AWS Resources
-- **S3 Bucket**: `vibe-dating-media-{environment}` (configured via `MEDIA_S3_BUCKET` env var)
+- **S3 Bucket**: `shoss-media-{environment}` (configured via `MEDIA_S3_BUCKET` env var)
 - **CloudFront Distribution**: Media delivery CDN with signed URL authentication
 - **Lambda Functions**:
   - `user_media_mgmt` - Media upload URL generation and management
@@ -65,7 +65,7 @@ Content-Type: application/json
 ```json
 {
   "mediaId": "aB3cD4eF",
-  "uploadUrl": "https://s3.amazonaws.com/vibe-dating-media-prod/uploads/20240101/user_id/profile_id/aB3cD4eF.jpg?X-Amz-Algorithm=...",
+  "uploadUrl": "https://s3.amazonaws.com/shoss-media-prd/uploads/20240101/user_id/profile_id/aB3cD4eF.jpg?X-Amz-Algorithm=...",
   "uploadMethod": "POST",
   "uploadHeaders": {
     "Content-Type": "image/jpeg",
@@ -140,7 +140,7 @@ def create_media(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
     // ... other profile fields
   },
   "signedUrl": {
-    "url": "https://media.vibe-dating.io/media/aB3cD4eF/0/*?Expires=1704214800&Signature=abc123def456...&Key-Pair-Id=APKABC123DEFGHIJKLMN",
+    "url": "https://media.shoss.io/media/aB3cD4eF/0/*?Expires=1704214800&Signature=abc123def456...&Key-Pair-Id=APKABC123DEFGHIJKLMN",
     "expiresAt": "2024-01-02T13:00:00Z"
   }
 }

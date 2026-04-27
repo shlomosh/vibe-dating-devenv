@@ -11,7 +11,7 @@ This document specifies the backend implementation for media upload, processing,
 - **Media Processing**: User Service (`src/services/user/aws_lambdas/user_media_processing/`)
 
 ### AWS Resources
-- **S3 Bucket**: `vibe-dating-media-{environment}` (configured via `MEDIA_S3_BUCKET` env var)
+- **S3 Bucket**: `shoss-media-{environment}` (configured via `MEDIA_S3_BUCKET` env var)
 - **CloudFront Distribution**: Media delivery CDN with signed URL authentication
 - **Lambda Functions**:
   - `user_media_mgmt` - Media upload URL generation and management
@@ -83,7 +83,7 @@ Content-Type: application/json
 ```json
 {
   "mediaId": "aB3cD4eF",
-  "uploadUrl": "https://s3.amazonaws.com/vibe-dating-media-prod/",
+  "uploadUrl": "https://s3.amazonaws.com/shoss-media-prd/",
   "uploadMethod": "POST",
   "uploadHeaders": {
     "Content-Type": "image/jpeg",

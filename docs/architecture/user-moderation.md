@@ -1,6 +1,6 @@
 # User Moderation — Architecture & Design Specification
 
-This document covers the end-to-end moderation system for the Vibe Dating app: ban enforcement, user reporting, automatic profile restrictions, block relationships, and the frontend flows for denied login and in-app reporting.
+This document covers the end-to-end moderation system for the Shoss app: ban enforcement, user reporting, automatic profile restrictions, block relationships, and the frontend flows for denied login and in-app reporting.
 
 **Related:** [System architecture](./system-architecture.md), [Chat architecture](./chat-architecture.md), [Moderation dashboard](./moderation-dashboard.md)
 
@@ -53,7 +53,7 @@ This document covers the end-to-end moderation system for the Vibe Dating app: b
             │
             ▼
    ┌────────────────────┐
-   │  vibe-dating-{env} │  ← USER#, PROFILE#, REPORT#, BLOCK#
+   │  shoss-{env} │  ← USER#, PROFILE#, REPORT#, BLOCK#
    └────────────────────┘
             ▲
    ┌────────┴────────────┐
@@ -67,7 +67,7 @@ This document covers the end-to-end moderation system for the Vibe Dating app: b
 
 ## 2. Data Model Extensions
 
-All new entities live in the existing `vibe-dating-{env}` single-table unless noted.
+All new entities live in the existing `shoss-{env}` single-table unless noted.
 
 ### 2.1 Extensions to existing types
 
@@ -256,7 +256,7 @@ GSI3SK = {epochSeconds}#{myProfileId}
 
 As part of the same block operation (after the DynamoDB transaction commits):
 
-1. Look up the chat thread between P1 and Q1 in `vibe-dating-chat`
+1. Look up the chat thread between P1 and Q1 in `shoss-chat`
 2. Batch-delete all message items in the thread
 3. Delete the thread metadata record
 
@@ -452,7 +452,7 @@ report_category_weights: Dict[str, int] = {
 
 **Location:** `backend/src/services/user/aws_lambdas/user_report_processing/lambda_function.py`
 
-Triggered by **DynamoDB Streams** on `vibe-dating-{env}` for new/modified report items.
+Triggered by **DynamoDB Streams** on `shoss-{env}` for new/modified report items.
 
 Report items have `SK` beginning with `REPORT#`, so the stream filter targets those:
 
@@ -534,7 +534,7 @@ On `sendMessage`, `chat_websocket_msgs` checks `PROFILE#{sender}/BLOCK#{recipien
 As part of the block operation, after the DynamoDB transaction commits:
 
 1. Write `PROFILE#{P1}/BLOCK#{Q1}` and `PROFILE#{Q1}/BLOCK#{P1}` atomically
-2. Look up the chat thread between P1 and Q1 in `vibe-dating-chat`
+2. Look up the chat thread between P1 and Q1 in `shoss-chat`
 3. Batch-delete all message items
 4. Delete the thread metadata record
 
@@ -628,7 +628,7 @@ Shown when `POST /auth/platform` returns HTTP 403. Replaces the splash screen �
 │                                     │
 │  ─────────────────────────────────  │
 │  If you believe this is a mistake,  │
-│  contact support: @VibeSupport      │
+│  contact support: @ShossSupport      │
 │                                     │
 └─────────────────────────────────────┘
 ```
@@ -679,7 +679,7 @@ Shown when `POST /auth/platform` returns HTTP 403. Replaces the splash screen �
 
 Category is **required**. Context is optional (max 500 chars). Sheet title adapts: "Report Profile", "Report Post", "Report Chat".
 
-After submit: toast — "Report submitted. Thank you for keeping Vibe safe."
+After submit: toast — "Report submitted. Thank you for keeping Shoss safe."
 
 **TypeScript types:**
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document explains how the frontend application can securely access profile images through CloudFront CDN using a single wildcard signed URL for all media items under a profile’s path, optimized for Swiper integration and browser caching. The Vibe Dating application uses a secure media delivery system that provides a single signed URL per profile, cached in memory on the `ProfileRecord` object, to access all associated media, enabling browser caching and seamless use with Swiper's `<img>` tags.
+This document explains how the frontend application can securely access profile images through CloudFront CDN using a single wildcard signed URL for all media items under a profile’s path, optimized for Swiper integration and browser caching. The Shoss application uses a secure media delivery system that provides a single signed URL per profile, cached in memory on the `ProfileRecord` object, to access all associated media, enabling browser caching and seamless use with Swiper's `<img>` tags.
 
 ## Architecture Overview
 
@@ -65,7 +65,7 @@ if (data.signedUrl) {
     // ... other profile fields
   },
   "signedUrl": {
-    "url": "https://media.vibe-dating.io/media/aB3cD4eF/*?Expires=1704214800&Signature=abc123def456...&Key-Pair-Id=APKABC123DEFGHIJKLMN",
+    "url": "https://media.shoss.io/media/aB3cD4eF/*?Expires=1704214800&Signature=abc123def456...&Key-Pair-Id=APKABC123DEFGHIJKLMN",
     "expiresAt": "2024-01-02T13:00:00Z"
   }
 }
@@ -284,8 +284,8 @@ Configure CloudFront domains for different environments:
 ```javascript
 const CLOUDFRONT_DOMAINS = {
   development: 'd1dev123456.cloudfront.net',
-  staging: 'd1staging789.cloudfront.net',
-  production: 'media.vibe-dating.io'
+  prd: 'd1staging789.cloudfront.net',
+  production: 'media.shoss.io'
 };
 
 const getCloudFrontDomain = () => {

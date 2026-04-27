@@ -1,14 +1,14 @@
-# API Reference - Vibe Dating Backend
+# API Reference - Shoss Backend
 
 ## Overview
 
-The Vibe Backend API is a RESTful API deployed on AWS Lambda via API Gateway. It provides endpoints for user authentication, profile management, location-based matching, and nearby profile discovery. The API uses JWT tokens for authentication and supports secure media uploads through S3 presigned URLs.
+The Shoss Backend API is a RESTful API deployed on AWS Lambda via API Gateway. It provides endpoints for user authentication, profile management, location-based matching, and nearby profile discovery. The API uses JWT tokens for authentication and supports secure media uploads through S3 presigned URLs.
 
 ## Base URL
 
-- **Development**: `https://api-dev.vibe-dating.io`
-- **Staging**: `https://api-staging.vibe-dating.io`
-- **Production**: `https://api.vibe-dating.io`
+- **Development**: `https://api-dev.shoss.io`
+- **Production**: `https://api.shoss.io`
+- **Production**: `https://api.shoss.io`
 
 ## Authentication
 
@@ -22,10 +22,10 @@ Authorization: Bearer <jwt_token>
 
 JWT tokens are issued after successful platform authentication and contain the following claims:
 
-- `uid`: Vibe user ID
+- `uid`: Shoss user ID
 - `iat`: Issued at timestamp
 - `exp`: Expiration timestamp
-- `iss`: Issuer (vibe-app)
+- `iss`: Issuer (shoss-app)
 
 ## API Endpoints
 
@@ -158,7 +158,7 @@ Authorization: Bearer <jwt_token>
     },
     "lastSeen": 1704110400,
     "mediaSignedUrl": {
-      "url": "https://media.vibe-dating.io/media/profile_id/0/*?Expires=1704214800&Signature=abc123def456...&Key-Pair-Id=APKABC123DEFGHIJKLMN",
+      "url": "https://media.shoss.io/media/profile_id/0/*?Expires=1704214800&Signature=abc123def456...&Key-Pair-Id=APKABC123DEFGHIJKLMN",
       "expiresAt": "2024-01-01T18:00:00"
     }
   }
@@ -222,7 +222,7 @@ Authorization: Bearer <jwt_token>
     "mediaRecords": {},
     "lastSeen": 1704110400,
     "mediaSignedUrl": {
-      "url": "https://media.vibe-dating.io/media/new_profile_id/0/*?Expires=1704214800&Signature=abc123def456...&Key-Pair-Id=APKABC123DEFGHIJKLMN",
+      "url": "https://media.shoss.io/media/new_profile_id/0/*?Expires=1704214800&Signature=abc123def456...&Key-Pair-Id=APKABC123DEFGHIJKLMN",
       "expiresAt": "2024-01-01T18:00:00"
     }
   },
@@ -290,7 +290,7 @@ Authorization: Bearer <jwt_token>
     },
     "lastSeen": 1704110400,
     "mediaSignedUrl": {
-      "url": "https://media.vibe-dating.io/media/existing_profile_id/0/*?Expires=1704214800&Signature=abc123def456...&Key-Pair-Id=APKABC123DEFGHIJKLMN",
+      "url": "https://media.shoss.io/media/existing_profile_id/0/*?Expires=1704214800&Signature=abc123def456...&Key-Pair-Id=APKABC123DEFGHIJKLMN",
       "expiresAt": "2024-01-01T18:00:00"
     }
   },
@@ -376,7 +376,7 @@ Authorization: Bearer <jwt_token>
 ```json
 {
   "mediaId": "aB3cD4eF",
-  "uploadUrl": "https://s3.amazonaws.com/vibe-dating-media-prod/uploads/20240101/user_id/profile_id/aB3cD4eF.jpg?X-Amz-Algorithm=...",
+  "uploadUrl": "https://s3.amazonaws.com/shoss-media-prd/uploads/20240101/user_id/profile_id/aB3cD4eF.jpg?X-Amz-Algorithm=...",
   "uploadMethod": "POST",
   "uploadHeaders": {
     "Content-Type": "image/jpeg",
@@ -586,7 +586,7 @@ GET /feed/abc12345/nearby?nextToken=encrypted_pagination_token
       "lastDistance": 4071,
       "lastSeen": 1704110400,
       "mediaSignedUrl": {
-        "url": "https://media.vibe-dating.io/media/nearby_profile_id/0/*?Expires=1704214800&Signature=abc123...&Key-Pair-Id=APKABC123...",
+        "url": "https://media.shoss.io/media/nearby_profile_id/0/*?Expires=1704214800&Signature=abc123...&Key-Pair-Id=APKABC123...",
         "expiresAt": "2024-01-01T18:00:00"
       }
     }
@@ -669,22 +669,22 @@ GET /feed/{profileId}/nearby?nextToken=encrypted_token_123
 The API is configured with custom domains for each environment:
 
 ### Development Environment
-- **Domain**: `api-dev.vibe-dating.io`
-- **SSL**: AWS Certificate Manager certificate
-- **DNS**: Route53 hosted zone
-
-### Staging Environment
-- **Domain**: `api-staging.vibe-dating.io`
+- **Domain**: `api-dev.shoss.io`
 - **SSL**: AWS Certificate Manager certificate
 - **DNS**: Route53 hosted zone
 
 ### Production Environment
-- **Domain**: `api.vibe-dating.io`
+- **Domain**: `api.shoss.io`
+- **SSL**: AWS Certificate Manager certificate
+- **DNS**: Route53 hosted zone
+
+### Production Environment
+- **Domain**: `api.shoss.io`
 - **SSL**: AWS Certificate Manager certificate
 - **DNS**: Route53 hosted zone
 
 ### Media Domain
-- **Domain**: `media.vibe-dating.io` (production only)
+- **Domain**: `media.shoss.io` (production only)
 - **CDN**: CloudFront distribution
 - **Storage**: S3 bucket with CloudFront origin
 
@@ -723,7 +723,7 @@ All custom domains use SSL certificates managed by AWS Certificate Manager:
 
 The infrastructure uses Route53 for DNS management:
 
-- **Hosted Zone**: `vibe-dating.io`
+- **Hosted Zone**: `shoss.io`
 - **A Records**: Point to API Gateway custom domain
 - **CNAME Records**: For SSL certificate validation
 - **Nameservers**: Route53 nameservers for the domain

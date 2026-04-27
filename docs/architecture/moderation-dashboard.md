@@ -43,7 +43,7 @@ All profile data — including anonymous profiles — is fully visible to modera
 ## 3. Architecture
 
 - **Frontend:** `dashboard/` directory. Stack: **React 19 + TypeScript + Vite + TailAdmin (free)**. Auth: direct Cognito API calls via `src/lib/cognitoAuth.ts` (no Amplify library).
-- **Backend:** `backend/src/services/admin/` — two Lambdas + a dedicated API Gateway. Mounted at `/admin` base path on the shared `api.vibe-dating.io` custom domain. Separate from the public user API so Cognito staff tokens and Telegram JWTs stay isolated.
+- **Backend:** `backend/src/services/admin/` — two Lambdas + a dedicated API Gateway. Mounted at `/admin` base path on the shared `api.shoss.io` custom domain. Separate from the public user API so Cognito staff tokens and Telegram JWTs stay isolated.
 
 ```mermaid
 flowchart LR
@@ -52,10 +52,10 @@ flowchart LR
     COG[Cognito User Pool]
   end
   subgraph aws [AWS]
-    APIG[API Gateway REST Admin\napi.vibe-dating.io/admin]
+    APIG[API Gateway REST Admin\napi.shoss.io/admin]
     AUTH[admin_cognito_authorizer Lambda]
     API[admin_api Lambda]
-    DDB[(vibe-dating)]
+    DDB[(shoss)]
     S3[(Media S3)]
   end
   UI --> COG
@@ -72,8 +72,8 @@ flowchart LR
 
 ### 4.1 Cognito login
 
-- **Amazon Cognito User Pool** (`vibe-admin-pool-{env}`) is the only staff identity store.
-- **Frontend:** Custom `src/lib/cognitoAuth.ts` — direct Cognito API calls using `USER_PASSWORD_AUTH` flow (no Amplify library). After sign-in, attaches the Cognito access token as `Authorization: Bearer …` on all admin API calls. Tokens stored in `localStorage` under key `vibe_admin_tokens`.
+- **Amazon Cognito User Pool** (`shoss-admin-pool-{env}`) is the only staff identity store.
+- **Frontend:** Custom `src/lib/cognitoAuth.ts` — direct Cognito API calls using `USER_PASSWORD_AUTH` flow (no Amplify library). After sign-in, attaches the Cognito access token as `Authorization: Bearer …` on all admin API calls. Tokens stored in `localStorage` under key `shoss_admin_tokens`.
 - **First-login flow:** Handles `NEW_PASSWORD_REQUIRED` challenge inline on the sign-in page. Staff enter their new password before proceeding. On first login (or whenever MFA hasn't been enrolled), Cognito returns `MFA_SETUP`: the dashboard calls `AssociateSoftwareToken`, shows a QR code (via `qrcode.react`) and a copyable manual key, then verifies the first TOTP code with `VerifySoftwareToken` before completing sign-in.
 - **Token refresh:** Automatic via `REFRESH_TOKEN_AUTH` on page load using the stored refresh token.
 - **Token validity:** Access token = 8 h, ID token = 8 h, refresh token = 30 days.
@@ -139,21 +139,21 @@ Notes:
 
 ### 6.1 Lambdas
 
-Stack naming: **`vibe-admin-*-{environment}`**. Located under `backend/src/services/admin/`.
+Stack naming: **`shoss-admin-*-{environment}`**. Located under `backend/src/services/admin/`.
 
 | Lambda | Name | Responsibility |
 |--------|------|----------------|
-| `admin_cognito_authorizer` | `vibe-admin-cognito-authorizer-{env}` | Validate Cognito JWT; inject `sub`, `email`, groups into context |
-| `admin_api` | `vibe-admin-api-{env}` | All dashboard operations |
+| `admin_cognito_authorizer` | `shoss-admin-cognito-authorizer-{env}` | Validate Cognito JWT; inject `sub`, `email`, groups into context |
+| `admin_api` | `shoss-admin-api-{env}` | All dashboard operations |
 
 CloudFormation stacks: 4 sequential templates — `01-iam`, `02-cognito`, `03-lambda`, `04-apigateway`.
 
 ### 6.2 API design
 
-One API Gateway (`vibe-admin-api-{env}`) mounted at `/admin` on the shared custom domain. The Lambda handles routing internally based on method + `resource` field.
+One API Gateway (`shoss-admin-api-{env}`) mounted at `/admin` on the shared custom domain. The Lambda handles routing internally based on method + `resource` field.
 
 ```
-GET    /admin/hello           unauthenticated health check (MOCK, returns {"service":"vibe-admin"})
+GET    /admin/hello           unauthenticated health check (MOCK, returns {"service":"shoss-admin"})
 GET    /admin/v1  ?resource=<resource>&...filters/ids
 POST   /admin/v1  body: { resource, action, ...payload }
 DELETE /admin/v1  body: { resource, id, ...payload }   (wired in API GW; no handler implemented yet — returns 405)

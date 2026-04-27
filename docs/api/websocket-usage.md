@@ -1,6 +1,6 @@
 # WebSocket Integration Guide
 
-This document explains how to use the WebSocket integration for real-time chat in the Vibe Dating application.
+This document explains how to use the WebSocket integration for real-time chat in the Shoss application.
 
 ## Overview
 
@@ -161,7 +161,7 @@ interface WebSocketMessage {
   "messageId": "abc12345",
   "senderProfileId": "profileA",
   "recipientProfileId": "profileB",
-  "content": "https://media.vibe-dating.io/...",
+  "content": "https://media.shoss.io/...",
   "contentType": "image"
 }
 ```
@@ -184,9 +184,9 @@ interface WebSocketMessage {
 Set these in your environment:
 
 - `VITE_WEBSOCKET_URL`: Custom WebSocket URL (optional)
-- `VITE_ENVIRONMENT`: Environment (dev/staging/prod)
+- `VITE_ENVIRONMENT`: Environment (dev/prd)
 
-Default WebSocket URL: `wss://chat.vibe-dating.io/{environment}`
+Default WebSocket URL: `wss://chat.shoss.io/{environment}`
 
 ### Authentication
 

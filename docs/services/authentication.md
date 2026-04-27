@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document outlines the authentication system for the Vibe REST API using AWS API Gateway, JWT tokens, and Telegram WebApp authentication. The system consists of two main Lambda functions: `auth_platform` for authentication and `auth_jwt_authorizer` for API authorization.
+This document outlines the authentication system for the Shoss REST API using AWS API Gateway, JWT tokens, and Telegram WebApp authentication. The system consists of two main Lambda functions: `auth_platform` for authentication and `auth_jwt_authorizer` for API authorization.
 
 ## Current Implementation
 
@@ -25,7 +25,7 @@ This document outlines the authentication system for the Vibe REST API using AWS
 
 ### 1.2. Token Issuance
 - **Backend**: Validates Telegram payload, issues a JWT (JSON Web Token) for API access.
-- **JWT Claims**: Includes `uid` (Vibe user ID), `iat`, `exp`, `iss`.
+- **JWT Claims**: Includes `uid` (Shoss user ID), `iat`, `exp`, `iss`.
 
 ### 1.3. API Access
 - **Frontend**: Attaches JWT as a Bearer token in the `Authorization` header for all API requests.
@@ -102,10 +102,10 @@ const AuthProvider = ({ children }) => {
       });
 
       const { token, userId, activeProfileId, profileIds, limits } = await response.json();
-      
+
       // Store token securely
-      localStorage.setItem('vibe_auth_token', token);
-      
+      localStorage.setItem('shoss_auth_token', token);
+
       setAuthState({
         isAuthenticated: true,
         token,
@@ -133,10 +133,10 @@ const AuthProvider = ({ children }) => {
 // API client with automatic token injection
 class ApiClient {
   private baseURL = process.env.REACT_APP_API_BASE_URL;
-  
+
   private async request(endpoint: string, options: RequestInit = {}) {
-    const token = localStorage.getItem('vibe_auth_token');
-    
+    const token = localStorage.getItem('shoss_auth_token');
+
     const config: RequestInit = {
       ...options,
       headers: {
@@ -147,14 +147,14 @@ class ApiClient {
     };
 
     const response = await fetch(`${this.baseURL}${endpoint}`, config);
-    
+
     // Handle token expiration
     if (response.status === 401) {
-      localStorage.removeItem('vibe_auth_token');
+      localStorage.removeItem('shoss_auth_token');
       // Redirect to re-authentication
       window.location.reload();
     }
-    
+
     return response;
   }
 
@@ -162,7 +162,7 @@ class ApiClient {
   async getProfiles() {
     return this.request('/api/v1/profiles');
   }
-  
+
   async createProfile(data: CreateProfileData) {
     return this.request('/api/v1/profiles', {
       method: 'POST',
@@ -186,37 +186,37 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     try:
         # Parse request body
         body = parse_request_body(event)
-        
+
         platform = body.get("platform")
         platform_token = body.get("platformToken")
         platform_metadata = body.get("platformMetadata", {})
-        
+
         if platform == "telegram":
             from telegram import TelegramPlatform
-            
+
             platform_user_data = TelegramPlatform(
                 platform_token=platform_token,
                 get_secret_f=SecretsManagerService.get_secret,
             ).authenticate()
-            
+
             platform_user_id = platform_user_data.get("id")
         else:
             raise ResponseError(400, {"error": "Invalid platform"})
-        
+
         # Create/update user record
         user_mgmt = UserManager(platform=platform, platform_user_id=platform_user_id)
         user_mgmt.upsert(platform, platform_user_id, platform_metadata)
-        
+
         # Check if user is banned
         if user_mgmt.is_banned():
             raise ResponseError(403, {"error": "Account is banned"})
-        
+
         # Generate JWT token
         token = _api_generate_jwt_token(signed_data={"uid": user_mgmt.user_id})
-        
+
         # Get user data
         user_data = user_mgmt.get()
-        
+
         return generate_response(200, {
             "token": token,
             "userId": user_mgmt.user_id,
@@ -224,7 +224,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             "profileIds": user_data["profileIds"],
             "limits": user_data["limits"],
         })
-        
+
     except ResponseError as e:
         return e.to_dict()
     except Exception as ex:
@@ -241,13 +241,13 @@ def _api_generate_jwt_token(signed_data: Dict[str, Any], expires_in: int = 7) ->
         **signed_data,
         "iat": int(now.timestamp()),
         "exp": int((now + datetime.timedelta(days=expires_in)).timestamp()),
-        "iss": "vibe-app",
+        "iss": "shoss-app",
     }
-    
+
     # Get JWT secret from AWS Secrets Manager
     jwt_secret_arn = os.environ.get("JWT_SECRET_ARN")
     secret = SecretsManagerService.get_secret(jwt_secret_arn)
-    
+
     return jwt.encode(payload, secret, algorithm="HS256")
 
 def api_verify_jwt_token(token: str) -> Dict[str, Any]:
@@ -255,10 +255,10 @@ def api_verify_jwt_token(token: str) -> Dict[str, Any]:
     try:
         jwt_secret_arn = os.environ.get("JWT_SECRET_ARN")
         secret = SecretsManagerService.get_secret(jwt_secret_arn)
-        
+
         payload = jwt.decode(token, secret, algorithms=["HS256"])
         return payload
-        
+
     except jwt.ExpiredSignatureError:
         raise Exception("Token has expired")
     except jwt.InvalidTokenError:
@@ -275,25 +275,25 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     try:
         # Extract token from Authorization header
         auth_header = event.get("authorizationToken", "")
-        
+
         if not auth_header.startswith("Bearer "):
             raise Exception("Invalid authorization header format")
-        
+
         token = auth_header.replace("Bearer ", "")
-        
+
         # Verify JWT token using secret from AWS Secrets Manager
         payload = api_verify_jwt_token(token)
         user_id = payload["uid"]
-        
+
         # Generate allow policy with proper resource pattern
         method_arn = event["methodArn"]
         arn_parts = method_arn.split("/")
-        
+
         if len(arn_parts) >= 3:
             # Allow access to all methods and resources under this API
             api_base = "/".join(arn_parts[:2])
             method_arn = f"{api_base}/*/*"
-        
+
         policy = {
             "principalId": user_id,
             "policyDocument": {
@@ -313,9 +313,9 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 "exp": str(payload.get("exp")),
             },
         }
-        
+
         return policy
-        
+
     except Exception as ex:
         # Generate deny policy
         return api_generate_policy(
@@ -344,7 +344,7 @@ ApiGatewayAuthorizer:
   Properties:
     Name: AuthJwtAuthorizer
     Type: TOKEN
-    AuthorizerUri: !Sub 
+    AuthorizerUri: !Sub
       - arn:aws:apigateway:${ApiRegion}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
       - LambdaArn: !GetAtt AuthorizerFunction.Arn
     AuthorizerCredentials: !GetAtt ApiGatewayAuthorizerRole.Arn
@@ -481,4 +481,4 @@ sequenceDiagram
 - [AWS API Gateway JWT Authorizer](https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-auth-jwt-authorizer.html)
 - [OWASP REST Security](https://owasp.org/www-project-api-security/)
 - [JWT.io](https://jwt.io/) - JWT token debugging and validation
-- [AWS Lambda Authorizers](https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-use-lambda-authorizer.html) 
+- [AWS Lambda Authorizers](https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-use-lambda-authorizer.html)

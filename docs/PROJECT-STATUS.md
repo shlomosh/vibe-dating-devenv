@@ -1,13 +1,13 @@
-# Vibe Dating App - Project Status Report
+# Shoss App - Project Status Report
 
 **Date**: March 4, 2026  
-**Project**: Vibe Dating - Telegram Mini-App for the LGBTQ+ Community
+**Project**: Shoss - Telegram Mini-App for the LGBTQ+ Community
 
 ---
 
 ## Executive Summary
 
-Vibe Dating is a location-based dating application running as a Telegram Mini-App. The project consists of a **React/TypeScript frontend** and a **Python/AWS serverless backend**. Core features (auth, profiles, media, location, feed) are production-ready. The app supports two profile types: **public** (visible on feed) and **anonymous** (hidden from feed, only visible via posts). Users can create feed posts (text and/or media, one active post per profile) that appear on the nearby feed. Real-time chat backend infrastructure is deployed but frontend integration remains on mock data. No matching/blocking system exists yet.
+Shoss is a location-based dating application running as a Telegram Mini-App. The project consists of a **React/TypeScript frontend** and a **Python/AWS serverless backend**. Core features (auth, profiles, media, location, feed) are production-ready. The app supports two profile types: **public** (visible on feed) and **anonymous** (hidden from feed, only visible via posts). Users can create feed posts (text and/or media, one active post per profile) that appear on the nearby feed. Real-time chat backend infrastructure is deployed but frontend integration remains on mock data. No matching/blocking system exists yet.
 
 ---
 
@@ -21,7 +21,7 @@ Vibe Dating is a location-based dating application running as a Telegram Mini-Ap
 | Storage | S3 (media), CloudFront (CDN) |
 | Auth | Telegram WebApp + JWT |
 | IaC | AWS CloudFormation |
-| Hosting | CloudFront + S3 at `tma.vibe-dating.io` |
+| Hosting | CloudFront + S3 at `tma.shoss.io` |
 
 ---
 
@@ -98,18 +98,18 @@ Vibe Dating is a location-based dating application running as a Telegram Mini-Ap
 
 | Service | Resource | Region |
 |---------|----------|--------|
-| API Gateway (REST) | `api-dev.vibe-dating.io` | il-central-1 |
-| API Gateway (WebSocket) | `chat.vibe-dating.io/dev` | il-central-1 |
-| DynamoDB | `vibe-dating-dev` (main) | il-central-1 |
-| DynamoDB | `vibe-dating-chat-dev` (chat) | il-central-1 |
-| S3 | Lambda code bucket | il-central-1 |
-| S3 | Media bucket (`vibe-dating-media-dev`) | us-east-1 |
-| S3 | Frontend bucket | il-central-1 |
-| CloudFront | Media CDN (`media.vibe-dating.io`) | Global |
-| CloudFront | Frontend CDN (`tma.vibe-dating.io`) | Global |
-| Route53 | `vibe-dating.io` hosted zone | Global |
-| Secrets Manager | JWT, UUID namespace, pagination, CloudFront keys | il-central-1 |
-| KMS | DynamoDB encryption | il-central-1 |
+| API Gateway (REST) | `api.shoss.io` | us-east-1 |
+| API Gateway (WebSocket) | `chat.shoss.io/prd` | us-east-1 |
+| DynamoDB | `shoss-prd` (main) | us-east-1 |
+| DynamoDB | `shoss-chat-prd` (chat) | us-east-1 |
+| S3 | Lambda code bucket | us-east-1 |
+| S3 | Media bucket (`shoss-media-prd`) | us-east-1 |
+| S3 | Frontend bucket | us-east-1 |
+| CloudFront | Media CDN (`media.shoss.io`) | Global |
+| CloudFront | Frontend CDN (`tma.shoss.io`) | Global |
+| Route53 | `shoss.io` hosted zone | Global |
+| Secrets Manager | JWT, UUID namespace, pagination, CloudFront keys | us-east-1 |
+| KMS | DynamoDB encryption | us-east-1 |
 
 ### CloudFormation Stacks (deploy order)
 
@@ -171,7 +171,7 @@ Post data stored as nested sub-record (PostRecord) within profile record
 ## Repository Structure
 
 ```
-vibe-dating/
+shoss/
 ├── frontend/                  # React/TypeScript Telegram Mini-App
 │   ├── src/
 │   │   ├── api/              # REST & WebSocket API clients

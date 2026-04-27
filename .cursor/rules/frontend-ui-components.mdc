@@ -1,5 +1,5 @@
 ---
-description: UI component patterns for Vibe Dating frontend
+description: UI component patterns for Shoss frontend
 globs: frontend/src/components/**/*.tsx
 alwaysApply: false
 ---

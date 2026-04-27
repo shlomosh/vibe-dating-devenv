@@ -1,6 +1,6 @@
 # Plan: Standalone web deployment with Telegram authentication
 
-This document describes how to deploy Vibe Dating as a **normal browser web application** (not opened inside Telegram as a Mini App), while **keeping identity tied to Telegram**—users prove who they are via Telegram, then use the product entirely in a regular browser tab.
+This document describes how to deploy Shoss as a **normal browser web application** (not opened inside Telegram as a Mini App), while **keeping identity tied to Telegram**—users prove who they are via Telegram, then use the product entirely in a regular browser tab.
 
 It complements the existing stack: React/Vite frontend on CloudFront+S3, Python Lambdas behind API Gateway, JWT sessions after platform auth.
 
@@ -48,7 +48,7 @@ flowchart LR
   APIG --> AUTH
 ```
 
-- **Hosting:** Same pattern as today: static build to S3, CloudFront distribution, optional separate hostname (e.g. `app.vibe-dating.io`) from the Mini App URL (`tma.vibe-dating.io`).
+- **Hosting:** Same pattern as today: static build to S3, CloudFront distribution, optional separate hostname (e.g. `app.shoss.io`) from the Mini App URL (`tma.shoss.io`).
 - **API:** Same API Gateway base URL (`VITE_API_BASE_URL`); ensure **CORS** allows the web origin and required headers (`Authorization`, `Content-Type`).
 - **Session:** Unchanged: short-lived JWT after successful Telegram verification, stored client-side (today: `LocalStorage` via `StorageKeys.UserAuth`).
 
@@ -124,7 +124,7 @@ flowchart LR
 
 ## 8. Telegram / BotFather configuration
 
-- Set the **domain** allowed for the Login Widget to the production web hostname (and staging if applicable).
+- Set the **domain** allowed for the Login Widget to the production web hostname (and prd if applicable).
 - Ensure the bot token used by `auth_platform` matches the bot users log in through.
 - Document whether **Mini App** and **Web** share one bot (simplest) or use separate bots (only if product/legal needs require it).
 
@@ -132,7 +132,7 @@ flowchart LR
 
 ## 9. Phased rollout
 
-1. **Phase A — Backend:** Widget (or chosen) verification + tests; staging deploy; contract documented in `docs/api/api-reference.md`.
+1. **Phase A — Backend:** Widget (or chosen) verification + tests; prd deploy; contract documented in `docs/api/api-reference.md`.
 2. **Phase B — Frontend web shell:** Web bootstrap without Telegram (theme, router, no Mini App crashes).
 3. **Phase C — Web login:** Widget page + `initializeTelegramWeb` + end-to-end login to JWT.
 4. **Phase D — Hosting:** CloudFront distribution, env-specific `VITE_API_BASE_URL`, smoke tests from real browsers.

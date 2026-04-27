@@ -1,10 +1,10 @@
 # User Service - ID Hashing & Management
 
-This document explains how Telegram user IDs are converted into Vibe user IDs using a deterministic hashing process.
+This document explains how Telegram user IDs are converted into Shoss user IDs using a deterministic hashing process.
 
 ## Overview
 
-The system uses a two-step process to convert Telegram user IDs into Vibe user IDs:
+The system uses a two-step process to convert Telegram user IDs into Shoss user IDs:
 1. Create a platform-specific identifier string
 2. Hash the string using UUID v5 and convert to Base64
 
@@ -29,7 +29,7 @@ The platform identifier string is then hashed using the following process:
 ```python
 def hash_string_to_id(platform_id_string: str) -> str:
     """
-    Convert platform ID string to Vibe user ID using UUID v5
+    Convert platform ID string to Shoss user ID using UUID v5
 
     Args:
         platform_id_string: String in format "telegram:123456789"
@@ -82,7 +82,7 @@ This converts the UUID to Base64 by:
 
 ### Step 3: Final User ID
 
-The final Vibe user ID is created by taking the first 8 characters of the Base64 string:
+The final Shoss user ID is created by taking the first 8 characters of the Base64 string:
 
 ```python
 user_id = hash_string_to_id(platform_id_string)
@@ -107,7 +107,7 @@ print(user_id)  # 8-character Base64 string
 
 ## Key Properties
 
-1. **Deterministic**: The same Telegram user ID will always produce the same Vibe user ID
+1. **Deterministic**: The same Telegram user ID will always produce the same Shoss user ID
 2. **Collision Resistant**: Uses UUID v5 with a namespace from AWS Secrets Manager to minimize collisions
 3. **Compact**: Final user ID is only 8 characters long
 4. **Platform Agnostic**: The same process can be used for other platforms by changing the platform identifier

@@ -2,7 +2,7 @@
 
 ## Overview
 
-A comprehensive AWS Secrets Manager integration has been added to the Vibe Dating App backend to provide secure, centralized secret management for all application secrets.
+A comprehensive AWS Secrets Manager integration has been added to the Shoss App backend to provide secure, centralized secret management for all application secrets.
 
 ## New Files Added
 
@@ -17,7 +17,7 @@ A comprehensive AWS Secrets Manager integration has been added to the Vibe Datin
 ### 🔐 Core Functionality
 - **Interactive Setup**: Guided setup for core and optional secrets
 - **Automatic Generation**: Secure JWT secret generation using cryptographically secure methods
-- **Environment Support**: Multi-environment secret management (dev/staging/prod)
+- **Environment Support**: Multi-environment secret management (dev/prd)
 - **Validation**: Comprehensive secret validation and health checks
 - **Export**: Export secrets to environment files or console output
 - **Rotation**: Secure secret rotation with new value generation
@@ -80,17 +80,17 @@ python scripts/manage_secrets.py delete --secret old_api_key --force
 
 ### Required Environment Variables
 ```bash
-export ENVIRONMENT=dev|staging|prod
-export AWS_REGION=il-central-1
-export AWS_PROFILE=vibe-dev
+export ENVIRONMENT=dev|prd
+export AWS_REGION=us-east-1
+export AWS_PROFILE=shoss-dev
 ```
 
 ### Secret Naming Convention
-- Format: `vibe-dating/{secret-name}/{environment}`
+- Format: `shoss/{secret-name}/{environment}`
 - Examples:
-  - `vibe-dating/telegram-bot-token/dev`
-  - `vibe-dating/jwt-secret/prod`
-  - `vibe-dating/agora-app-id/staging`
+  - `shoss/telegram-bot-token/prd`
+  - `shoss/jwt-secret/prd`
+  - `shoss/agora-app-id/prd`
 
 ## Integration with Existing Systems
 
@@ -127,7 +127,7 @@ poetry run service-deploy auth
 - **Rotation**: Automated secret rotation capabilities
 
 ### 📈 Scalability
-- **Multi-Environment**: Support for dev/staging/prod environments
+- **Multi-Environment**: Support for dev/prd environments
 - **Extensible**: Easy to add new secret types
 - **Standardized**: Consistent naming and tagging conventions
 - **Future-Ready**: Designed to support additional services

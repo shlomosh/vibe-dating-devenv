@@ -2,7 +2,7 @@
 
 ## Overview
 
-Create a new hosting service for the Vibe Dating App backend that will set up and manage AWS infrastructure for hosting the frontend application on CloudFront under the `tma.vibe-dating.io` domain.
+Create a new hosting service for the Shoss App backend that will set up and manage AWS infrastructure for hosting the frontend application on CloudFront under the `tma.shoss.io` domain.
 
 ## Service Requirements
 
@@ -25,14 +25,14 @@ src/services/hosting/
 
 #### 1. Build System Integration
 - **Build Script**: Create `src/services/hosting/build.py` following the pattern from `src/services/auth/build.py`
-- **Frontend Integration**: Use `VIBE_FRONTEND_PATH` environment variable to locate frontend repository
+- **Frontend Integration**: Use `SHOSS_FRONTEND_PATH` environment variable to locate frontend repository
 - **Vite Build Integration**: Leverage existing Vite build scripts from frontend repository
 - **Build Artifacts**: Generate optimized frontend assets for CloudFront deployment and upload to S3
 
 #### 2. Deployment Infrastructure
 - **S3 Bucket**: Create dedicated S3 bucket for frontend assets with proper permissions
 - **CloudFront Distribution**: Configure CloudFront with:
-  - Custom domain: `tma.vibe-dating.io`
+  - Custom domain: `tma.shoss.io`
   - SSL certificate via ACM
   - Optimized caching policies for static assets
   - Security headers and CORS configuration
@@ -47,7 +47,7 @@ src/services/hosting/
 #### 4. Service Integration
 - **Core Stack Dependencies**: Integrate with existing core infrastructure
 - **Parameters Integration**: Read deployment parameters from `src/config/parameters.yaml`
-- **Environment Support**: Support dev, staging, and production environments using parameters.yaml
+- **Environment Support**: Support dev, prd, and production environments using parameters.yaml
 - **Secrets Management**: Use AWS Secrets Manager for sensitive configuration
 - **Monitoring**: Integrate with CloudWatch for deployment monitoring
 
@@ -55,24 +55,24 @@ src/services/hosting/
 
 Follow the existing naming patterns:
 - **Service Name**: `hosting`
-- **Stack Names**: `vibe-dating-hosting-{component}-{environment}`
-- **S3 Bucket**: `vibe-dating-frontend-{environment}`
-- **CloudFront Distribution**: `vibe-dating-frontend-{environment}`
+- **Stack Names**: `shoss-hosting-{component}-{environment}`
+- **S3 Bucket**: `shoss-frontend-{environment}`
+- **CloudFront Distribution**: `shoss-frontend-{environment}`
 
 ### Deployment Parameters
 
 The service should read deployment parameters from `src/config/parameters.yaml`:
 
-- `Environment`: Deployment environment (dev/staging/prod)
+- `Environment`: Deployment environment (dev/prd)
 - `DeploymentUUID`: Unique identifier for deployment tracking
 - `AppRegion`: AWS region for deployment  
-- `AppDomainName`: Domain for the application (tma.vibe-dating.io)
+- `AppDomainName`: Domain for the application (tma.shoss.io)
 - `AllowedOrigins`: CORS allowed origins configuration
 
 ### Environment Variables
 
 The service should use these environment variables in addition to parameters.yaml:
-- `VIBE_FRONTEND_PATH`: Path to frontend repository
+- `SHOSS_FRONTEND_PATH`: Path to frontend repository
 - `AWS_PROFILE`: AWS profile for credentials
 
 ### Testing Requirements
@@ -110,7 +110,7 @@ Create comprehensive documentation following the pattern from `src/services/auth
 
 1. **Infrastructure Deployment**: Successfully deploy all AWS infrastructure components
 2. **Frontend Integration**: Seamlessly integrate with frontend Vite build process
-4. **Domain Configuration**: Properly configure `tma.vibe-dating.io` domain
+4. **Domain Configuration**: Properly configure `tma.shoss.io` domain
 5. **Testing Coverage**: Achieve comprehensive test coverage
 6. **Documentation**: Complete and accurate documentation
 7. **Security Compliance**: Meet all security requirements

@@ -1,6 +1,6 @@
 # Core Service
 
-This document covers the CloudFormation deployment for the Vibe Dating App core infrastructure.
+This document covers the CloudFormation deployment for the Shoss App core infrastructure.
 
 ## Overview
 
@@ -31,17 +31,17 @@ The stacks must be deployed in the following order due to dependencies:
 The `deploy.py` script handles the complete deployment process:
 
 ```bash
-# Deploy to dev environment (default)
+# Deploy to prd environment (default)
 python deploy.py
 
 # Deploy to specific environment
-python deploy.py --environment staging
+python deploy.py --environment prd
 
 # Deploy to specific region
 python deploy.py --region us-east-1
 
 # Use specific AWS profile
-python deploy.py --profile vibe-dating
+python deploy.py --profile shoss
 
 # Use custom deployment UUID
 python deploy.py --deployment-uuid "your-custom-uuid"
@@ -49,8 +49,8 @@ python deploy.py --deployment-uuid "your-custom-uuid"
 
 ### Command Line Options
 
-- `--environment`: Environment to deploy (dev, staging, prod) - default: dev
-- `--region`: AWS region - default: il-central-1
+- `--environment`: Environment to deploy (dev, prd) - default: prd
+- `--region`: AWS region - default: us-east-1
 - `--profile`: AWS profile to use
 - `--deployment-uuid`: Custom deployment UUID (optional)
 
@@ -61,21 +61,21 @@ If you prefer to deploy manually using AWS CLI:
 ```bash
 # 1. Deploy S3 stack
 aws cloudformation create-stack \
-  --stack-name vibe-dating-core-s3-dev \
+  --stack-name shoss-core-s3-dev \
   --template-body file://01-s3.yaml \
   --parameters ParameterKey=Environment,ParameterValue=dev \
-  --region il-central-1
+  --region us-east-1
 
 # 2. Deploy DynamoDB stack
 aws cloudformation create-stack \
-  --stack-name vibe-dating-core-dynamodb-dev \
+  --stack-name shoss-core-dynamodb-dev \
   --template-body file://02-dynamodb.yaml \
   --parameters ParameterKey=Environment,ParameterValue=dev \
-  --region il-central-1
+  --region us-east-1
 
 # 3. Deploy IAM stack (requires outputs from previous stacks)
 aws cloudformation create-stack \
-  --stack-name vibe-dating-core-iam-dev \
+  --stack-name shoss-core-iam-dev \
   --template-body file://03-iam.yaml \
   --parameters \
     ParameterKey=Environment,ParameterValue=dev \
@@ -83,7 +83,7 @@ aws cloudformation create-stack \
     ParameterKey=DynamoDBKMSKeyArn,ParameterValue=<from-dynamodb-stack> \
     ParameterKey=LambdaCodeBucketArn,ParameterValue=<from-s3-stack> \
   --capabilities CAPABILITY_NAMED_IAM \
-  --region il-central-1
+  --region us-east-1
 ```
 
 ## Stack Details
@@ -92,7 +92,7 @@ aws cloudformation create-stack \
 
 Creates an S3 bucket for storing Lambda function code:
 
-- **Bucket Name**: `vibe-dating-code-{environment}-{deployment-uuid}`
+- **Bucket Name**: `shoss-code-{environment}-{deployment-uuid}`
 - **Features**: Versioning, encryption, public access blocking
 - **Outputs**: Bucket name and ARN
 
@@ -100,8 +100,8 @@ Creates an S3 bucket for storing Lambda function code:
 
 Creates the main application database:
 
-- **Table Name**: `vibe-dating-{environment}`
-- **Features**: 
+- **Table Name**: `shoss-{environment}`
+- **Features**:
   - Single-table design with 6 GSIs
   - KMS encryption
   - Point-in-time recovery
@@ -150,9 +150,9 @@ To remove all stacks:
 
 ```bash
 # Delete in reverse order
-aws cloudformation delete-stack --stack-name vibe-dating-core-iam-dev
-aws cloudformation delete-stack --stack-name vibe-dating-core-dynamodb-dev
-aws cloudformation delete-stack --stack-name vibe-dating-core-s3-dev
+aws cloudformation delete-stack --stack-name shoss-core-iam-dev
+aws cloudformation delete-stack --stack-name shoss-core-dynamodb-dev
+aws cloudformation delete-stack --stack-name shoss-core-s3-dev
 ```
 
 **Note**: The S3 bucket has a deletion policy of "Retain" to prevent accidental data loss.

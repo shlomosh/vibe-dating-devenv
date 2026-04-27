@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Profile Management Backend provides comprehensive CRUD operations for user profiles in the Vibe Dating application. It handles profile creation, updates, retrieval, and deletion with strong validation and security controls.
+The Profile Management Backend provides comprehensive CRUD operations for user profiles in the Shoss application. It handles profile creation, updates, retrieval, and deletion with strong validation and security controls.
 
 ## Profile Management Scheme
 
@@ -211,7 +211,7 @@ class TravelDistanceType(str, Enum):
     "travelDistance": "city",
     "media": {"media_id_1": {"status": "ready", "fileSize": 2048576, "dimensions": {"width": 1920, "height": 1080}}, "media_id_2": {"status": "ready", "fileSize": 1536000, "dimensions": {"width": 1440, "height": 1920}}, "media_id_3": {"status": "processing", "fileSize": 3072000, "dimensions": {"width": 800, "height": 600}}, "media_id_4": {}, "media_id_5": {}}
     "mediaSignedUrl": {
-      "url": "https://media.vibe-dating.io/media/profile_id/0/*?Expires=1704214800&Signature=abc123def456...&Key-Pair-Id=APKABC123DEFGHIJKLMN",
+      "url": "https://media.shoss.io/media/profile_id/0/*?Expires=1704214800&Signature=abc123def456...&Key-Pair-Id=APKABC123DEFGHIJKLMN",
       "expiresAt": "2024-01-02T13:00:00Z"
     }
   },
@@ -318,7 +318,7 @@ class UserManager(CommonManager):
 
 ### Data Storage
 
-**DynamoDB Table**: `vibe-dating-{environment}`
+**DynamoDB Table**: `shoss-{environment}`
 
 **Primary Record Pattern**:
 ```

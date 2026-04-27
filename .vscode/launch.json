@@ -8,7 +8,7 @@
       "command": "npm run dev:https",
       "cwd": "${workspaceFolder}/frontend",
       "env": {
-        "VITE_TG_MOCK_WEB_APP_DATA": "user=%7B%22id%22%3A485233267%2C%22first_name%22%3A%22Shlomo%22%2C%22last_name%22%3A%22Shachar%22%2C%22username%22%3A%22XomoGo%22%2C%22language_code%22%3A%22en%22%2C%22allows_write_to_pm%22%3Atrue%2C%22photo_url%22%3A%22https%3A%5C%2F%5C%2Ft.me%5C%2Fi%5C%2Fuserpic%5C%2F320%5C%2Fhz_lBwqKghtC8Whuyd_JUoVykTP1XG2D_HPURCnfEKc.svg%22%7D&chat_instance=2514264085585022705&chat_type=sender&auth_date=1752764641&signature=5o5jj_DXhCclyNdwcVPAaDZ-_fwJMrva1gSz1ivdFWYx9xqfZi9Pq5HDCsSDDW_UcqviI8x_g_3fwZecEkpSBw&hash=3e2ec70c877e2e81894b1923e88d3f51e34b0341703ac2c11c8a5b10493105e0",
+        "VITE_TG_MOCK_WEB_APP_DATA": "user=%7B%22id%22%3A485233267%2C%22first_name%22%3A%22Shlomo%22%2C%22last_name%22%3A%22Shachar%22%2C%22username%22%3A%22XomoGo%22%2C%22language_code%22%3A%22he%22%2C%22allows_write_to_pm%22%3Atrue%2C%22photo_url%22%3A%22https%3A%5C%2F%5C%2Ft.me%5C%2Fi%5C%2Fuserpic%5C%2F320%5C%2Fhz_lBwqKghtC8Whuyd_JUoVykTP1XG2D_HPURCnfEKc.svg%22%7D&chat_instance=-4600043850520114450&chat_type=sender&auth_date=1777205143&signature=jzVAM7aiQ4AJe7xlLZnyarJKwhxIk6abGLSlMTWL-9fT45cVpgzmTlpaYyx9UUAjAPcrh1TFAiUimCRUdPXlCg&hash=43ce0a5eff5980bccc306c3bead1fee901971714191a3309c87064b42652aef3",
         "VITE_TG_MOCK_WEB_APP_VERSION": "8.4",
         "VITE_TG_MOCK_WEB_APP_PLATFORM": "tdesktop"
       }

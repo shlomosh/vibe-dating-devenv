@@ -1,5 +1,5 @@
 ---
-description: Backend Python/AWS coding standards for Vibe Dating
+description: Backend Python/AWS coding standards for Shoss
 globs: backend/**/*.py
 alwaysApply: false
 ---

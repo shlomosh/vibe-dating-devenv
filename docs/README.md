@@ -1,6 +1,6 @@
-# Vibe Dating - Project Documentation
+# Shoss - Project Documentation
 
-Consolidated documentation for the Vibe Dating application (Telegram Mini-App).
+Consolidated documentation for the Shoss application (Telegram Mini-App).
 
 ## Quick Links
 
