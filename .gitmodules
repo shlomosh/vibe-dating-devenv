@@ -7,3 +7,6 @@
 [submodule "dashboard"]
 	path = dashboard
 	url = git@github.com:shlomosh/shoss-dating-dashboard.git
+[submodule "shoss.io"]
+	path = shoss.io
+	url = git@github.com:shlomosh/vibe-dating-shoss-io.git
