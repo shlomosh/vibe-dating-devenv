@@ -2,7 +2,16 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Debug App Server (User-1)",
+      "name": "Debug App Server (Web)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run dev:https",
+      "cwd": "${workspaceFolder}/frontend",
+      "env": {
+      }
+    },
+    {
+      "name": "Debug App Server (TMA-1)",
       "type": "node-terminal",
       "request": "launch",
       "command": "npm run dev:https",
@@ -14,7 +23,7 @@
       }
     },
     {
-      "name": "Debug App Server (User-2)",
+      "name": "Debug App Server (TMA-2)",
       "type": "node-terminal",
       "request": "launch",
       "command": "npm run dev:https",
