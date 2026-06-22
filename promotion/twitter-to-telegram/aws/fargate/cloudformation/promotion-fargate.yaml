@@ -1,0 +1,330 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Shoss promotion — S3 bucket + S3 Files + Fargate scheduled task
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+
+  BucketName:
+    Type: String
+    Default: shoss-promotion
+    Description: S3 bucket name (global uniqueness required)
+
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+
+  RouteTableId:
+    Type: String
+    Description: Route table for SubnetId — gets the S3 Gateway endpoint route so the
+      S3 Files mount target (private ENI, no public IP) can reach S3 for object data.
+
+  ImageUri:
+    Type: String
+    Description: ECR image URI (account.dkr.ecr.region.amazonaws.com/repo:tag)
+
+  ScheduleExpression:
+    Type: String
+    Default: rate(6 hours)
+
+  ScheduleState:
+    Type: String
+    Default: ENABLED
+    AllowedValues: [ENABLED, DISABLED]
+    Description: Auto-trigger of the promotion task. Keep DISABLED until verified healthy.
+
+  TaskCpu:
+    Type: String
+    Default: "4096"
+
+  TaskMemory:
+    Type: String
+    Default: "16384"
+
+# Bucket is created and synced by deploy.sh before stack deploy (CFN cannot create
+# a bucket name that already exists — EarlyValidation::ResourceExistenceCheck).
+
+Resources:
+  # S3 Files object data is fetched through the mount-target ENI, which sits in
+  # SubnetId with a private IP only. Without this gateway endpoint it has no route
+  # to S3, so reads hang (metadata works, file content does not). This is the fix.
+  S3GatewayEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      VpcEndpointType: Gateway
+      RouteTableIds:
+        - !Ref RouteTableId
+
+  S3FilesServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: elasticfilesystem.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: s3files-bucket-sync
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub arn:aws:s3:::${BucketName}
+                  - !Sub arn:aws:s3:::${BucketName}/*
+
+  S3FileSystem:
+    Type: AWS::S3Files::FileSystem
+    Properties:
+      Bucket: !Sub arn:aws:s3:::${BucketName}
+      RoleArn: !GetAtt S3FilesServiceRole.Arn
+      AcceptBucketWarning: true
+      Tags:
+        - Key: Service
+          Value: promotion
+
+  S3FilesMountSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: S3 Files mount target NFS
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049
+          SourceSecurityGroupId: !Ref EcsSecurityGroup
+          Description: NFS from promotion tasks
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+
+  S3MountTarget:
+    Type: AWS::S3Files::MountTarget
+    Properties:
+      FileSystemId: !GetAtt S3FileSystem.FileSystemId
+      SubnetId: !Ref SubnetId
+      SecurityGroups:
+        - !Ref S3FilesMountSecurityGroup
+
+  EcsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Promotion Fargate tasks
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub shoss-promotion-ecs-${Environment}
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /ecs/shoss-promotion-${Environment}
+      RetentionInDays: 14
+
+  PromotionSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub shoss/promotion/${Environment}/credentials
+      Description: Telegram + Twitter credentials for promotion task
+      SecretString: '{"TELEGRAM_BOT_TOKEN":"REPLACE_ME","X_AUTH_TOKEN":"REPLACE_ME","X_CT0":"REPLACE_ME"}'
+
+  TaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: read-promotion-secret
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref PromotionSecret
+
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: s3files-client
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3files:ClientMount
+                  - s3files:ClientWrite
+                  - s3files:ClientRootAccess
+                Resource: !GetAtt S3FileSystem.FileSystemArn
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:ListBucket
+                  - s3:DeleteObject
+                Resource:
+                  - !Sub arn:aws:s3:::${BucketName}
+                  - !Sub arn:aws:s3:::${BucketName}/*
+              # ECS Exec: SSM channels for `aws ecs execute-command` into a task.
+              - Effect: Allow
+                Action:
+                  - ssmmessages:CreateControlChannel
+                  - ssmmessages:CreateDataChannel
+                  - ssmmessages:OpenControlChannel
+                  - ssmmessages:OpenDataChannel
+                Resource: "*"
+
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub shoss-promotion-${Environment}
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub shoss-promotion-${Environment}
+      RequiresCompatibilities:
+        - FARGATE
+      NetworkMode: awsvpc
+      Cpu: !Ref TaskCpu
+      Memory: !Ref TaskMemory
+      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      Volumes:
+        - Name: promotion-data
+          S3FilesVolumeConfiguration:
+            FileSystemArn: !GetAtt S3FileSystem.FileSystemArn
+            RootDirectory: /
+            TransitEncryptionPort: 2049
+      ContainerDefinitions:
+        - Name: promotion
+          Image: !Ref ImageUri
+          Essential: true
+          # initProcessEnabled: required for clean ECS Exec sessions (PID 1 init).
+          LinuxParameters:
+            InitProcessEnabled: true
+          MountPoints:
+            - SourceVolume: promotion-data
+              ContainerPath: /promotion
+              ReadOnly: false
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: promotion
+          Secrets:
+            - Name: TELEGRAM_BOT_TOKEN
+              ValueFrom: !Sub "${PromotionSecret}:TELEGRAM_BOT_TOKEN::"
+            - Name: X_AUTH_TOKEN
+              ValueFrom: !Sub "${PromotionSecret}:X_AUTH_TOKEN::"
+            - Name: X_CT0
+              ValueFrom: !Sub "${PromotionSecret}:X_CT0::"
+
+  SchedulerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: run-promotion-task
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecs:RunTask
+                Resource: !Sub arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:task-definition/shoss-promotion-${Environment}:*
+              - Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource:
+                  - !GetAtt TaskExecutionRole.Arn
+                  - !GetAtt TaskRole.Arn
+              - Effect: Allow
+                Action:
+                  - ecs:DescribeTasks
+                Resource: "*"
+
+  PromotionSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: !Sub shoss-promotion-${Environment}
+      Description: Run promotion for all channels every 6 hours
+      ScheduleExpression: !Ref ScheduleExpression
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      State: !Ref ScheduleState
+      Target:
+        Arn: !GetAtt Cluster.Arn
+        RoleArn: !GetAtt SchedulerRole.Arn
+        EcsParameters:
+          TaskDefinitionArn: !Ref TaskDefinition
+          LaunchType: FARGATE
+          TaskCount: 1
+          EnableExecuteCommand: true
+          NetworkConfiguration:
+            AwsvpcConfiguration:
+              AssignPublicIp: ENABLED
+              Subnets:
+                - !Ref SubnetId
+              SecurityGroups:
+                - !Ref EcsSecurityGroup
+          PlatformVersion: LATEST
+
+Outputs:
+  BucketName:
+    Value: !Ref BucketName
+  FileSystemArn:
+    Value: !GetAtt S3FileSystem.FileSystemArn
+  EcrRepositoryName:
+    Value: !Sub shoss-promotion-${Environment}
+  EcrRepositoryUri:
+    Value: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/shoss-promotion-${Environment}
+  ClusterName:
+    Value: !Ref Cluster
+  TaskDefinitionArn:
+    Value: !Ref TaskDefinition
+  SecretArn:
+    Value: !Ref PromotionSecret
+  LogGroupName:
+    Value: !Ref LogGroup
+  RunTaskCommand:
+    Value: !Sub |
+      aws ecs run-task --cluster ${Cluster} --task-definition ${TaskDefinition} --launch-type FARGATE --network-configuration "awsvpcConfiguration={subnets=[${SubnetId}],securityGroups=[${EcsSecurityGroup}],assignPublicIp=ENABLED}" --region ${AWS::Region}

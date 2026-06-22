@@ -1,0 +1,65 @@
+{
+  "downloads": {
+    "dir": "/tmp/downloads",
+    "keep_files": false
+  },
+  "run_state": {
+    "path": "/promotion/state/state.json"
+  },
+  "resource": {
+    "type": "csvfile",
+    "url": "file:///promotion/resources/resources.csv"
+  },
+  "twitter": {
+    "auth_token_env": "X_AUTH_TOKEN",
+    "ct0_env": "X_CT0"
+  },
+  "channels": {
+    "GayCheckMeOut": {
+      "enabled": true,
+      "telegram": {
+        "bot_token_env": "TELEGRAM_BOT_TOKEN",
+        "chat_id": -1003932979730
+      },
+      "posts": [
+        {
+          "resource": "O",
+          "delete_previous": false,
+          "silent": false
+        },
+        {
+          "text": "Shoss Discrete Gay Dating App\n\n * Works inside Telegram, nothing to install.\n * Completely free, no annoying commercials.\n\n Check it out: @shossAppBot",
+          "image": "/promotion/resources/shoss_screen_capture_anon.jpg",
+          "delete_previous": true
+        },
+        {
+          "text": "https://t.me/BerlinerGay\n\n Gays in Berlin? Join the group.",
+          "delete_previous": true
+        }
+      ]
+    },
+    "GayCheckMyAss": {
+      "enabled": true,
+      "telegram": {
+        "bot_token_env": "TELEGRAM_BOT_TOKEN",
+        "chat_id": -1003766170059
+      },
+      "posts": [
+        {
+          "resource": "A",
+          "delete_previous": false,
+          "silent": false
+        },
+        {
+          "text": "Shoss Discrete Gay Dating App\n\n * Works inside Telegram, nothing to install.\n * Completely free, no annoying commercials.\n\n Check it out: @shossAppBot",
+          "image": "/promotion/resources/shoss_screen_capture_anon.jpg",
+          "delete_previous": true
+        },
+        {
+          "text": "https://t.me/BerlinerGay\n\n Gays in Berlin? Join the group.",
+          "delete_previous": true
+        }
+      ]
+    }
+  }
+}
