@@ -14,7 +14,7 @@ from lib.config import (
     parse_tweet_id,
 )
 from lib.resource import create_backend
-from lib.resource.base import ResourceRow
+from lib.resource.base import ResourceBackend, ResourceRow
 from lib.run_state import (
     clear_message_ids,
     get_channel_state,
@@ -127,32 +127,14 @@ def run_promotion(
 
         if resource_class:
             assert backend is not None
-            log.info("post %d: selecting next row for class=%s", i, resource_class)
-            row = backend.select_next(str(resource_class))
-            if row is None:
+            result = _select_and_send(
+                cfg, env, backend, channel_key, str(resource_class), post, i, bot_token, chat_id, silent
+            )
+            if result is None:
                 if posts_succeeded == 0:
                     raise NoPendingRows(f"No available rows for class {resource_class!r}")
                 raise PromotionError(f"No available rows for class {resource_class!r} (partial run)")
-            log.info("post %d: selected %s (source=%s)", i, row.url, row.source)
-
-            caption = None
-            if post.get("text"):
-                ctx = _caption_context(channel_key, str(resource_class), row)
-                caption = render_caption(str(post["text"]), ctx)
-                if len(caption) > CAPTION_MAX_LEN:
-                    raise PromotionError(f"Post {i}: rendered caption exceeds {CAPTION_MAX_LEN} chars")
-
-            log.info("post %d: downloading %s", i, row.url)
-            media_path = _download_resource(cfg, env, row, str(resource_class))
-            size = media_path.stat().st_size if media_path.exists() else -1
-            log.info("post %d: downloaded %s (%d bytes)", i, media_path.name, size)
-            try:
-                log.info("post %d: sending media to telegram", i)
-                mid = tg.send_media_file(bot_token, chat_id, media_path, caption, silent)
-                log.info("post %d: telegram accepted, message_id=%s", i, mid)
-            finally:
-                if not cfg.keep_files and media_path.exists():
-                    media_path.unlink(missing_ok=True)
+            row, mid = result
 
             log.info("post %d: marking row used", i)
             backend.mark_used(row)
@@ -209,6 +191,91 @@ def _caption_context(channel_key: str, class_name: str, row: ResourceRow) -> dic
     }
 
 
+def _discard_media(cfg: AppConfig, media_path: Path) -> None:
+    if not cfg.keep_files and media_path.exists():
+        media_path.unlink(missing_ok=True)
+
+
+def _is_resource_fatal(error: tg.TelegramError) -> bool:
+    """True when Telegram rejects the media itself (vs. a transient/network error),
+    so the row should be flagged BAD instead of crashing and retrying forever.
+
+    HTTP 413 (Request Entity Too Large) means the file exceeds Telegram's upload
+    limit — it will never succeed for this resource.
+    """
+    return getattr(error, "code", None) == 413
+
+
+def _select_and_send(
+    cfg: AppConfig,
+    env: dict[str, str],
+    backend: ResourceBackend,
+    channel_key: str,
+    class_name: str,
+    post: dict,
+    post_index: int,
+    bot_token: str,
+    chat_id,
+    silent: bool,
+) -> tuple[ResourceRow, int] | None:
+    """Pick the next available row, download its media, and send it to Telegram.
+
+    A resource that can't be downloaded, exceeds Telegram's upload limit, or is
+    rejected by Telegram as too large (HTTP 413) is flagged BAD in the store (so
+    it is never retried) and selection moves on to the next available row. Returns
+    (row, message_id) on success, or None once the class is fully exhausted.
+    """
+    while True:
+        log.info("post %d: selecting next row for class=%s", post_index, class_name)
+        row = backend.select_next(class_name)
+        if row is None:
+            return None
+        log.info("post %d: selected %s (source=%s)", post_index, row.url, row.source)
+        log.info("post %d: downloading %s", post_index, row.url)
+        try:
+            media_path = _download_resource(cfg, env, row, class_name)
+        except TwitterDownloadError as e:
+            log.warning("post %d: download failed for %s: %s — marking BAD", post_index, row.url, e)
+            backend.mark_bad(row)
+            continue
+        size = media_path.stat().st_size if media_path.exists() else -1
+        log.info("post %d: downloaded %s (%d bytes)", post_index, media_path.name, size)
+
+        if size > tg.MAX_UPLOAD_BYTES:
+            log.warning(
+                "post %d: %s is %d bytes (> %d Telegram limit) — marking BAD",
+                post_index, row.url, size, tg.MAX_UPLOAD_BYTES,
+            )
+            backend.mark_bad(row)
+            _discard_media(cfg, media_path)
+            continue
+
+        caption = None
+        if post.get("text"):
+            ctx = _caption_context(channel_key, class_name, row)
+            caption = render_caption(str(post["text"]), ctx)
+            if len(caption) > CAPTION_MAX_LEN:
+                _discard_media(cfg, media_path)
+                raise PromotionError(f"Post {post_index}: rendered caption exceeds {CAPTION_MAX_LEN} chars")
+
+        try:
+            log.info("post %d: sending media to telegram", post_index)
+            mid = tg.send_media_file(bot_token, chat_id, media_path, caption, silent)
+            log.info("post %d: telegram accepted, message_id=%s", post_index, mid)
+        except tg.TelegramError as e:
+            _discard_media(cfg, media_path)
+            if _is_resource_fatal(e):
+                log.warning(
+                    "post %d: telegram rejected media for %s: %s — marking BAD",
+                    post_index, row.url, e,
+                )
+                backend.mark_bad(row)
+                continue
+            raise
+        _discard_media(cfg, media_path)
+        return row, mid
+
+
 def _download_resource(cfg: AppConfig, env: dict[str, str], row: ResourceRow, class_name: str) -> Path:
     source = row.source.lower()
     if source != "twitter":
@@ -223,11 +290,9 @@ def _download_resource(cfg: AppConfig, env: dict[str, str], row: ResourceRow, cl
         ct0 = env_required(cfg, env, ct0_env)
     except ValueError as e:
         raise PromotionError(str(e)) from e
-    try:
-        path = download_twitter(row.url, class_name, cfg.downloads_dir, auth, ct0)
-    except TwitterDownloadError as e:
-        raise PromotionError(str(e)) from e
-    return path
+    # TwitterDownloadError propagates to the caller, which flags the row BAD and
+    # moves on. Config/credential problems above stay fatal (PromotionError).
+    return download_twitter(row.url, class_name, cfg.downloads_dir, auth, ct0)
 
 
 def delete_channel_posts(

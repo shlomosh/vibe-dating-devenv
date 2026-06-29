@@ -10,6 +10,10 @@ from lib.durable_write import write_text_durable
 from lib.log import log
 from lib.resource.base import ResourceBackend, ResourceRow
 
+# Sentinel date for resources that exist in the store but can't be downloaded.
+# Non-empty so _is_available() returns False and select_next() never picks it.
+BAD_DATE = "0000-00-00"
+
 
 def _is_available(val) -> bool:
     if val is None:
@@ -86,6 +90,13 @@ class CsvfileBackend(ResourceBackend):
             raise RuntimeError("Resource backend not loaded")
         stamp = datetime.now().isoformat(timespec="seconds")
         self._df.loc[row.index, "date"] = stamp
+        self._save()
+
+    def mark_bad(self, row: ResourceRow) -> None:
+        if self._df is None:
+            raise RuntimeError("Resource backend not loaded")
+        log.info("csv: marking row %d BAD (%s)", row.index, row.url)
+        self._df.loc[row.index, "date"] = BAD_DATE
         self._save()
 
     def _save(self) -> None:

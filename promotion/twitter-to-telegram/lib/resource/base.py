@@ -32,6 +32,10 @@ class ResourceBackend(ABC):
         ...
 
     @abstractmethod
+    def mark_bad(self, row: ResourceRow) -> None:
+        """Flag a row whose media can't be downloaded so it is never retried."""
+
+    @abstractmethod
     def counts(self) -> dict[str, dict[str, int]]:
         ...
 

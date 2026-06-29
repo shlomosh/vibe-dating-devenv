@@ -11,10 +11,13 @@ from lib.log import log
 
 API_TIMEOUT = 30  # seconds (sendMessage / deleteMessage JSON calls)
 UPLOAD_TIMEOUT = 180  # seconds (photo / video / document multipart uploads)
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # Telegram Bot API upload limit (sendVideo/Document)
 
 
 class TelegramError(Exception):
-    pass
+    def __init__(self, message: str, code: int | None = None):
+        super().__init__(message)
+        self.code = code
 
 
 def _api_post_json(token: str, endpoint: str, payload: dict) -> dict:
@@ -26,7 +29,7 @@ def _api_post_json(token: str, endpoint: str, payload: dict) -> dict:
             result = json.loads(resp.read())
     except urllib.error.HTTPError as e:
         body = e.read().decode()
-        raise TelegramError(f"Telegram API HTTP {e.code}: {body}") from e
+        raise TelegramError(f"Telegram API HTTP {e.code}: {body}", code=e.code) from e
     except (urllib.error.URLError, TimeoutError) as e:
         raise TelegramError(f"Telegram API request failed ({endpoint}): {e}") from e
     if not result.get("ok"):
@@ -72,7 +75,7 @@ def _api_post_multipart(token: str, endpoint: str, fields: dict, files: dict[str
             result = json.loads(resp.read())
     except urllib.error.HTTPError as e:
         body_err = e.read().decode()
-        raise TelegramError(f"Telegram API HTTP {e.code}: {body_err}") from e
+        raise TelegramError(f"Telegram API HTTP {e.code}: {body_err}", code=e.code) from e
     except (urllib.error.URLError, TimeoutError) as e:
         raise TelegramError(f"Telegram upload failed ({endpoint}): {e}") from e
     if not result.get("ok"):

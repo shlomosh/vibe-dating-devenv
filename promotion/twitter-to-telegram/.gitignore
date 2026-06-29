@@ -5,5 +5,7 @@ config.json
 state.json
 downloads/
 *.tmp
+*.session
+*.session-journal
 .local-mount/
 .deploy-staging/
