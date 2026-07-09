@@ -98,10 +98,19 @@ def send_text(token: str, chat_id, text: str, silent: bool = False) -> int:
     return message_id_from_result(_api_post_json(token, "sendMessage", payload))
 
 
-def send_photo(token: str, chat_id, file_path: Path, caption: str | None = None, silent: bool = False) -> int:
+def send_photo(
+    token: str,
+    chat_id,
+    file_path: Path,
+    caption: str | None = None,
+    silent: bool = False,
+    parse_mode: str | None = None,
+) -> int:
     fields = {"chat_id": str(chat_id)}
     if caption:
         fields["caption"] = caption
+    if parse_mode:
+        fields["parse_mode"] = parse_mode
     if silent:
         fields["disable_notification"] = "true"
     return message_id_from_result(_api_post_multipart(token, "sendPhoto", fields, {"photo": file_path}))
@@ -117,12 +126,15 @@ def send_video(
     height: int | None = None,
     duration: int | None = None,
     thumbnail: Path | None = None,
+    parse_mode: str | None = None,
 ) -> int:
     # supports_streaming + dimensions + an explicit thumbnail make Telegram play
     # the video inline with a preview instead of a download-only file.
     fields = {"chat_id": str(chat_id), "supports_streaming": "true"}
     if caption:
         fields["caption"] = caption
+    if parse_mode:
+        fields["parse_mode"] = parse_mode
     if silent:
         fields["disable_notification"] = "true"
     if width:
@@ -144,6 +156,7 @@ def send_media_file(
     file_path: Path,
     caption: str | None = None,
     silent: bool = False,
+    parse_mode: str | None = None,
 ) -> int:
     mime_type, _ = mimetypes.guess_type(str(file_path))
     suffix = file_path.suffix.lower()
@@ -152,6 +165,8 @@ def send_media_file(
         fields = {"chat_id": str(chat_id)}
         if caption:
             fields["caption"] = caption
+        if parse_mode:
+            fields["parse_mode"] = parse_mode
         if silent:
             fields["disable_notification"] = "true"
         return message_id_from_result(_api_post_multipart(token, "sendAnimation", fields, {"animation": file_path}))
@@ -170,15 +185,18 @@ def send_media_file(
                 height=meta.get("height"),
                 duration=meta.get("duration"),
                 thumbnail=thumb,
+                parse_mode=parse_mode,
             )
         finally:
             if thumb:
                 thumb.unlink(missing_ok=True)
     if mime_type and mime_type.startswith("image"):
-        return send_photo(token, chat_id, file_path, caption, silent)
+        return send_photo(token, chat_id, file_path, caption, silent, parse_mode=parse_mode)
     fields = {"chat_id": str(chat_id)}
     if caption:
         fields["caption"] = caption
+    if parse_mode:
+        fields["parse_mode"] = parse_mode
     if silent:
         fields["disable_notification"] = "true"
     return message_id_from_result(_api_post_multipart(token, "sendDocument", fields, {"document": file_path}))
