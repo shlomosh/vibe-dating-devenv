@@ -24,7 +24,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import html
 import json
 import os
 import sys
@@ -36,9 +35,8 @@ if str(ROOT) not in sys.path:
 
 from lib import telegram  # noqa: E402
 from lib.config import load_env  # noqa: E402
+from lib.credits import build_caption  # noqa: E402
 from lib.log import log, setup_logging  # noqa: E402
-
-CAPTION_MAX_LEN = 1024  # Telegram media caption limit
 
 
 def build_env() -> dict[str, str]:
@@ -54,33 +52,11 @@ def env_required(env: dict[str, str], name: str) -> str:
     return val
 
 
-def build_caption(profile: dict) -> str:
-    """Format the profile as an HTML caption: bold name, profile link, bio links."""
-    name = (profile.get("name") or "").strip()
-    profile_link = (profile.get("profile_link") or "").strip()
-    bio_links = profile.get("bio_links") or []
-
-    lines: list[str] = []
-    if name:
-        lines.append(f"<b>{html.escape(name)}</b>")
-    if profile_link:
-        lines.append(html.escape(profile_link))
-    for link in bio_links:
-        link = (link or "").strip()
-        if link:
-            lines.append(html.escape(link))
-
-    caption = "\n".join(lines)
-    if len(caption) > CAPTION_MAX_LEN:
-        caption = caption[:CAPTION_MAX_LEN]
-    return caption
-
-
 def main(argv: list[str] | None = None) -> int:
     setup_logging()
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("info_json", help="Path to the JSON from download_twitter_media_and_info.py")
-    parser.add_argument("--channel", default="-1004454678300", help="Destination channel id (e.g. -1004454678300)")
+    parser.add_argument("--channel", default="-1004391816455", help="Destination channel id (e.g. -1004391816455)")
     parser.add_argument("--silent", action="store_true", help="Send without a notification")
     args = parser.parse_args(argv)
 

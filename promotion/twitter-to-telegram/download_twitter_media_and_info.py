@@ -22,7 +22,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import sys
 from pathlib import Path
 
@@ -30,17 +29,14 @@ ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from lib import proc  # noqa: E402
 from lib.config import load_env, parse_tweet_id  # noqa: E402
-from lib.log import log, setup_logging  # noqa: E402
+from lib.credits import build_profile, fetch_profile  # noqa: E402
+from lib.log import setup_logging  # noqa: E402
 from lib.sources.twitter import (  # noqa: E402
     TwitterDownloadError,
     _write_cookie_file,
     download_twitter,
 )
-
-METADATA_TIMEOUT = 120  # seconds (gallery-dl -j metadata fetch)
-URL_RE = re.compile(r"https?://[^\s]+")
 
 
 def build_env() -> dict[str, str]:
@@ -54,70 +50,6 @@ def env_required(env: dict[str, str], name: str) -> str:
     if not val:
         raise SystemExit(f"Missing required environment variable: {name} (set it in .env)")
     return val
-
-
-def _find_author(data) -> dict | None:
-    """Pull the author/user object out of gallery-dl's -j output.
-
-    -j prints a list of [code, ...] records; the tweet metadata record carries an
-    "author" (and "user") dict. Walk the structure and return the first one.
-    """
-    if isinstance(data, dict):
-        for key in ("author", "user"):
-            if isinstance(data.get(key), dict) and data[key].get("name"):
-                return data[key]
-        for val in data.values():
-            found = _find_author(val)
-            if found:
-                return found
-    elif isinstance(data, list):
-        for item in data:
-            found = _find_author(item)
-            if found:
-                return found
-    return None
-
-
-def fetch_profile(url: str, cookie_file: Path) -> dict:
-    """Return the poster's author metadata dict via gallery-dl -j."""
-    import shutil
-
-    if not shutil.which("gallery-dl"):
-        raise TwitterDownloadError("gallery-dl not found on PATH (needed for profile info)")
-    cmd = ["gallery-dl", "--cookies", str(cookie_file), "--range", "1", "-j", url]
-    log.info("gallery-dl -j: start (timeout=%ss) %s", METADATA_TIMEOUT, url)
-    try:
-        result = proc.run(cmd, timeout=METADATA_TIMEOUT)
-    except proc.ProcessTimeout as e:
-        raise TwitterDownloadError(f"Profile metadata fetch {e}") from e
-    if result.returncode != 0:
-        err = (result.stderr or result.stdout or "unknown error").strip()
-        raise TwitterDownloadError(f"Profile metadata fetch failed: {err}")
-    try:
-        data = json.loads(result.stdout)
-    except json.JSONDecodeError as e:
-        raise TwitterDownloadError(f"Could not parse gallery-dl JSON: {e}") from e
-    author = _find_author(data)
-    if not author:
-        raise TwitterDownloadError("No author metadata found in gallery-dl output")
-    return author
-
-
-def bio_links(author: dict) -> list[str]:
-    """Every link in the bio: the profile website plus URLs in the bio text.
-
-    gallery-dl already expands t.co links to their real targets, so both the
-    `url` website field and URLs embedded in `description` are usable as-is.
-    Order-preserving dedupe.
-    """
-    links: list[str] = []
-    website = (author.get("url") or "").strip()
-    if website:
-        links.append(website)
-    for match in URL_RE.findall(author.get("description") or ""):
-        links.append(match.rstrip(".,);"))
-    seen: set[str] = set()
-    return [x for x in links if not (x in seen or seen.add(x))]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -154,22 +86,13 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         cookie_file.unlink(missing_ok=True)
 
-    handle = author.get("name", "")
-    display_name = author.get("nick") or handle
-    profile_link = f"https://x.com/{handle}" if handle else None
-    links = bio_links(author)
+    profile = build_profile(author)
 
     result = {
         "url": args.url,
         "tweet_id": parse_tweet_id(args.url),
         "media_path": str(media_path),
-        "profile": {
-            "name": display_name,
-            "handle": handle,
-            "profile_link": profile_link,
-            "bio": author.get("description"),
-            "bio_links": links,
-        },
+        "profile": profile,
     }
 
     json_path = Path(args.json).resolve() if args.json else media_path.with_suffix(".json")
@@ -179,11 +102,11 @@ def main(argv: list[str] | None = None) -> int:
     print("\n=== Downloaded media ===")
     print(f"  {media_path}")
     print("\n=== Poster profile ===")
-    print(f"  Name:    {display_name}")
-    print(f"  Profile: {profile_link or '(unknown)'}")
-    if links:
+    print(f"  Name:    {profile['name']}")
+    print(f"  Profile: {profile['profile_link'] or '(unknown)'}")
+    if profile["bio_links"]:
         print("  Bio links:")
-        for link in links:
+        for link in profile["bio_links"]:
             print(f"    - {link}")
     else:
         print("  Bio links: (none)")

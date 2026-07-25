@@ -45,6 +45,8 @@ echo "==> Posting..."
 # written in place per successful post, so we always push back what we have.
 ./twitter_to_telegram_promotion.py run --channel GayCheckMyAss
 ./twitter_to_telegram_promotion.py run --channel GayCheckMeOut
+./twitter_to_telegram_promotion.py run --channel OhDaddy
+./twitter_to_telegram_promotion.py run --channel HotGays
 rc=$?
 
 echo "==> Pushing updated state back to s3://$BUCKET/"

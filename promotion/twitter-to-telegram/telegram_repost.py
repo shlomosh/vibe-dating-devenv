@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Repost the media of every "Forwarded from..." message from one Telegram
-channel to another (re-uploaded as fresh content, so the destination posts carry
-no "Forwarded from" attribution).
+"""Copy every message from one Telegram channel to another.
+
+Messages are not forwarded (no "Forwarded from..." attribution). Instead each
+message's media and/or text is downloaded from the source and re-uploaded as
+fresh content on the destination.
 
 Why a user session and not the bot token: the Telegram **Bot API cannot read or
 search a channel's history** even when the bot is an admin -- it only receives
@@ -49,6 +51,7 @@ from lib.log import log, setup_logging  # noqa: E402
 
 SESSION_PATH = ROOT / ".telegram_repost.session"
 CAPTION_MAX_LEN = 1024  # Telegram media caption limit
+TEXT_MAX_LEN = 4096  # Telegram plain text message limit
 
 
 def build_env() -> dict[str, str]:
@@ -78,18 +81,17 @@ def parse_chat(value: str):
         return value
 
 
-def has_repostable_media(msg) -> bool:
-    """True if the message carries a photo or a video we should re-upload."""
-    if msg.photo is not None:
+def is_repostable(msg) -> bool:
+    """True if the message carries content worth copying (media and/or text).
+
+    Service messages (user joined, pinned, etc.) and empty placeholders are
+    skipped since there is nothing to re-upload.
+    """
+    if getattr(msg, "action", None) is not None:
+        return False
+    if msg.media is not None:
         return True
-    if msg.video is not None:
-        return True
-    # Gifs/animations and video documents surface via .gif / .video_note too.
-    if getattr(msg, "gif", None) is not None:
-        return True
-    if getattr(msg, "video_note", None) is not None:
-        return True
-    return False
+    return bool((msg.message or "").strip())
 
 
 def caption_for(msg) -> str | None:
@@ -99,8 +101,8 @@ def caption_for(msg) -> str | None:
     return text[:CAPTION_MAX_LEN]
 
 
-async def collect_forwarded(client, source, *, limit, min_id, max_id):
-    """Return forwarded messages with repostable media, oldest-first.
+async def collect_messages(client, source, *, limit, min_id, max_id):
+    """Return all repostable source messages, oldest-first.
 
     Albums (grouped media) are collapsed into a single batch keyed by grouped_id
     so a multi-photo post is reposted as one album rather than N separate posts.
@@ -117,9 +119,7 @@ async def collect_forwarded(client, source, *, limit, min_id, max_id):
 
     async for msg in client.iter_messages(source, limit=limit, **iter_kwargs):
         scanned += 1
-        if msg.forward is None:
-            continue
-        if not has_repostable_media(msg):
+        if not is_repostable(msg):
             continue
         gid = msg.grouped_id
         if gid is not None:
@@ -140,10 +140,26 @@ async def collect_forwarded(client, source, *, limit, min_id, max_id):
 
 
 async def repost_batch(client, dest, batch, downloads_dir: Path, *, keep_files: bool) -> bool:
-    """Download a batch's media and re-upload it to dest. Returns True on send."""
+    """Download a batch's media (if any) and re-upload it to dest, or send its
+    text as a plain message when the batch carries no media. Returns True on send.
+    """
+    has_media = any(m.media is not None for m in batch)
+
+    if not has_media:
+        msg = batch[0]
+        text = (msg.message or "").strip()
+        if not text:
+            log.warning("msg %d has no text or media; skipping", msg.id)
+            return False
+        await client.send_message(dest, text[:TEXT_MAX_LEN])
+        log.info("reposted text-only msg %d", msg.id)
+        return True
+
     paths: list[Path] = []
     try:
         for msg in batch:
+            if msg.media is None:
+                continue
             dest_path = await client.download_media(msg, file=str(downloads_dir))
             if dest_path:
                 paths.append(Path(dest_path))
@@ -197,19 +213,30 @@ async def run(args) -> int:
             " (same channel)" if src_entity.id == dst_entity.id else "",
         )
 
-        batches, scanned = await collect_forwarded(
+        batches, scanned = await collect_messages(
             client, src_entity, limit=args.limit, min_id=args.min_id, max_id=args.max_id
         )
-        total_media = sum(len(b) for b in batches)
-        log.info("found %d forwarded post(s) with media (%d media item(s))", len(batches), total_media)
+        media_batches = [b for b in batches if any(m.media is not None for m in b)]
+        total_media = sum(len(b) for b in media_batches)
+        text_only = len(batches) - len(media_batches)
+        log.info(
+            "found %d post(s) to repost (%d media post(s) / %d media item(s), %d text-only)",
+            len(batches), len(media_batches), total_media, text_only,
+        )
 
         if args.dry_run:
             for b in batches:
                 ids = ", ".join(str(m.id) for m in b)
-                cap = next((caption_for(m) for m in b if caption_for(m)), None)
+                has_media = any(m.media is not None for m in b)
+                if has_media:
+                    cap = next((caption_for(m) for m in b if caption_for(m)), None)
+                    kind = f"{len(b)} media"
+                else:
+                    cap = (b[0].message or "").strip()
+                    kind = "text"
                 preview = f' "{cap[:60]}"' if cap else ""
-                print(f"[dry-run] would repost msg(s) {ids} ({len(b)} media){preview}")
-            print(f"\n[dry-run] {len(batches)} post(s) / {total_media} media item(s); scanned {scanned}")
+                print(f"[dry-run] would repost msg(s) {ids} ({kind}){preview}")
+            print(f"\n[dry-run] {len(batches)} post(s) / {total_media} media item(s) / {text_only} text-only; scanned {scanned}")
             return 0
 
         reposted = 0
@@ -220,7 +247,7 @@ async def run(args) -> int:
             except Exception as e:  # noqa: BLE001 - keep going on a single failure
                 log.error("failed to repost msg %d: %s", b[0].id, e)
 
-        print(f"Done: reposted {reposted}/{len(batches)} forwarded post(s); scanned {scanned} message(s).")
+        print(f"Done: reposted {reposted}/{len(batches)} post(s); scanned {scanned} message(s).")
         return 0 if reposted == len(batches) else 1
     finally:
         await client.disconnect()

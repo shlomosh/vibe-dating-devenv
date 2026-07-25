@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import json
+import os
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from lib import credits
 from lib.config import (
     CAPTION_MAX_LEN,
     AppConfig,
@@ -24,7 +28,7 @@ from lib.run_state import (
     save_state,
     set_message_id,
 )
-from lib.sources.twitter import TwitterDownloadError, download_twitter
+from lib.sources.twitter import TwitterDownloadError, _write_cookie_file, download_twitter
 from lib import telegram as tg
 from lib.log import log
 
@@ -35,6 +39,10 @@ class NoPendingRows(Exception):
 
 class PromotionError(Exception):
     pass
+
+
+class PostDeclined(Exception):
+    """Raised when a prepost_credits_review post is rejected by the reviewer."""
 
 
 def _validate_post_entry(post: dict, index: int) -> None:
@@ -53,6 +61,8 @@ def _validate_post_entry(post: dict, index: int) -> None:
             raise PromotionError(f"Post {index}: static post needs text and/or image")
         if text and image and len(str(text)) > CAPTION_MAX_LEN:
             raise PromotionError(f"Post {index}: caption exceeds {CAPTION_MAX_LEN} chars")
+        if post.get("include_credits"):
+            raise PromotionError(f"Post {index}: include_credits requires a resource post")
 
 
 def run_promotion(
@@ -127,9 +137,14 @@ def run_promotion(
 
         if resource_class:
             assert backend is not None
-            result = _select_and_send(
-                cfg, env, backend, channel_key, str(resource_class), post, i, bot_token, chat_id, silent
-            )
+            try:
+                result = _select_and_send(
+                    cfg, env, backend, channel_key, str(resource_class), post, i, bot_token, chat_id, silent
+                )
+            except PostDeclined:
+                log.info("post %d: declined by reviewer, skipping", i)
+                print(f"[post {i}] Skipped (declined in credits review)")
+                continue
             if result is None:
                 if posts_succeeded == 0:
                     raise NoPendingRows(f"No available rows for class {resource_class!r}")
@@ -250,17 +265,36 @@ def _select_and_send(
             _discard_media(cfg, media_path)
             continue
 
-        caption = None
-        if post.get("text"):
-            ctx = _caption_context(channel_key, class_name, row)
-            caption = render_caption(str(post["text"]), ctx)
-            if len(caption) > CAPTION_MAX_LEN:
+        if post.get("include_credits"):
+            log.info("post %d: fetching poster profile for credits", post_index)
+            try:
+                profile = _fetch_credits_profile(cfg, env, row)
+            except TwitterDownloadError as e:
+                log.warning("post %d: profile fetch failed for %s: %s — marking BAD", post_index, row.url, e)
+                backend.mark_bad(row)
                 _discard_media(cfg, media_path)
-                raise PromotionError(f"Post {post_index}: rendered caption exceeds {CAPTION_MAX_LEN} chars")
+                continue
 
+            if post.get("prepost_credits_review"):
+                approved, profile = _review_profile(cfg, media_path, row, profile)
+                if not approved:
+                    _discard_media(cfg, media_path)
+                    raise PostDeclined()
+
+            caption = credits.build_caption(profile)
+        else:
+            caption = None
+            if post.get("text"):
+                ctx = _caption_context(channel_key, class_name, row)
+                caption = render_caption(str(post["text"]), ctx)
+                if len(caption) > CAPTION_MAX_LEN:
+                    _discard_media(cfg, media_path)
+                    raise PromotionError(f"Post {post_index}: rendered caption exceeds {CAPTION_MAX_LEN} chars")
+
+        parse_mode = "HTML" if post.get("include_credits") else None
         try:
             log.info("post %d: sending media to telegram", post_index)
-            mid = tg.send_media_file(bot_token, chat_id, media_path, caption, silent)
+            mid = tg.send_media_file(bot_token, chat_id, media_path, caption, silent, parse_mode=parse_mode)
             log.info("post %d: telegram accepted, message_id=%s", post_index, mid)
         except tg.TelegramError as e:
             _discard_media(cfg, media_path)
@@ -281,6 +315,13 @@ def _download_resource(cfg: AppConfig, env: dict[str, str], row: ResourceRow, cl
     if source != "twitter":
         raise PromotionError(f"Unsupported source: {row.source!r}")
 
+    auth, ct0 = _twitter_creds(cfg, env)
+    # TwitterDownloadError propagates to the caller, which flags the row BAD and
+    # moves on. Config/credential problems above stay fatal (PromotionError).
+    return download_twitter(row.url, class_name, cfg.downloads_dir, auth, ct0)
+
+
+def _twitter_creds(cfg: AppConfig, env: dict[str, str]) -> tuple[str, str]:
     auth_env = cfg.twitter.get("auth_token_env")
     ct0_env = cfg.twitter.get("ct0_env")
     if not auth_env or not ct0_env:
@@ -290,9 +331,52 @@ def _download_resource(cfg: AppConfig, env: dict[str, str], row: ResourceRow, cl
         ct0 = env_required(cfg, env, ct0_env)
     except ValueError as e:
         raise PromotionError(str(e)) from e
-    # TwitterDownloadError propagates to the caller, which flags the row BAD and
-    # moves on. Config/credential problems above stay fatal (PromotionError).
-    return download_twitter(row.url, class_name, cfg.downloads_dir, auth, ct0)
+    return auth, ct0
+
+
+def _fetch_credits_profile(cfg: AppConfig, env: dict[str, str], row: ResourceRow) -> dict:
+    """Fetch the poster's profile for a credits caption. TwitterDownloadError
+    propagates to the caller, which flags the row BAD and moves on."""
+    auth, ct0 = _twitter_creds(cfg, env)
+    cookie_file = _write_cookie_file(auth, ct0)
+    try:
+        author = credits.fetch_profile(row.url, cookie_file)
+    finally:
+        cookie_file.unlink(missing_ok=True)
+    return credits.build_profile(author)
+
+
+def _review_profile(
+    cfg: AppConfig, media_path: Path, row: ResourceRow, profile: dict
+) -> tuple[bool, dict]:
+    """Write the profile next to the downloaded media, let the operator edit it
+    in $EDITOR, then ask for a post/skip decision. Mirrors the old hot_gays.sh
+    workflow (download -> vi the JSON -> y/n) but driven from the resource queue.
+
+    Returns (approved, profile) where profile reflects any manual edits.
+    """
+    tweet_id = parse_tweet_id(row.url) or ""
+    info = {
+        "url": row.url,
+        "tweet_id": tweet_id,
+        "media_path": str(media_path),
+        "profile": profile,
+    }
+    json_path = media_path.with_suffix(".json")
+    json_path.write_text(json.dumps(info, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or "vi"
+    print(f"\nOpening {json_path} in {editor} for credits review...")
+    subprocess.call([editor, str(json_path)])
+
+    edited = json.loads(json_path.read_text(encoding="utf-8"))
+    profile = edited.get("profile") or profile
+
+    answer = input("Post? (y/n) ").strip().lower()
+    approved = answer in ("y", "yes")
+    if not cfg.keep_files:
+        json_path.unlink(missing_ok=True)
+    return approved, profile
 
 
 def delete_channel_posts(
